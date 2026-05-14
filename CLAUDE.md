@@ -12,10 +12,10 @@ rubber-duck is a Tauri v2 desktop app with a Rust backend and React/TypeScript f
 
 - **Runtime:** Tauri v2
 - **Backend:** Rust (2021 edition, latest stable)
-- **Frontend:** React 18 + TypeScript + Tailwind CSS
+- **Frontend:** React 19 + TypeScript + Tailwind CSS v4
 - **Storage:** SQLite via `rusqlite` with FTS5 for full-text search
 - **LLM:** Anthropic API (primary), OpenRouter (configurable), Ollama (offline fallback)
-- **Build:** Cargo workspace (if/when crates are extracted), pnpm for frontend
+- **Build:** Cargo workspace (if/when crates are extracted), bun for frontend
 
 ## Architecture Principles
 
@@ -99,7 +99,6 @@ rubber-duck/
 │
 ├── package.json
 ├── tsconfig.json
-├── tailwind.config.ts
 └── vite.config.ts
 ```
 
@@ -132,15 +131,15 @@ rubber-duck/
 
 ```toml
 [dependencies]
-tauri = { version = "2", features = ["all"] }
+tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.31", features = ["bundled", "fts5"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
+reqwest = { version = "0.13", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
