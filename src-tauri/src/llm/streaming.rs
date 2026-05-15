@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use crate::db::Database;
+use crate::session::conversation_store;
 use crate::session::store as session_store;
 use crate::session::note_store;
 use crate::settings::commands::get_api_key_from_keyring;
@@ -46,12 +47,8 @@ pub async fn send_message(
     let (messages, model) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
 
-        let user_msg_id = uuid::Uuid::new_v4().to_string();
-        conn.execute(
-            "INSERT INTO conversations (id, session_id, role, content) VALUES (?1, ?2, 'User', ?3)",
-            params![user_msg_id, session_id, content],
-        )
-        .map_err(|e| e.to_string())?;
+        conversation_store::save_message(&conn, &session_id, "User", &content)
+            .map_err(|e| e.to_string())?;
 
         let session = session_store::get(&conn, &session_id).map_err(|e| e.to_string())?;
 
@@ -134,11 +131,21 @@ pub async fn send_message(
         if !full_content.is_empty() {
             let db: State<Database> = app_clone.state::<Database>();
             if let Ok(conn) = db.conn() {
-                let id = uuid::Uuid::new_v4().to_string();
-                let _ = conn.execute(
-                    "INSERT INTO conversations (id, session_id, role, content) VALUES (?1, ?2, 'Assistant', ?3)",
-                    params![id, db_clone_session_id, full_content],
-                );
+                if let Err(e) = conversation_store::save_message(
+                    &conn,
+                    &db_clone_session_id,
+                    "Assistant",
+                    &full_content,
+                ) {
+                    tracing::error!("Failed to save assistant message: {e}");
+                    let _ = app_clone.emit(
+                        "llm:error",
+                        ErrorPayload {
+                            message: "Message displayed but failed to save — try sending again"
+                                .to_string(),
+                        },
+                    );
+                }
             };
         }
     });

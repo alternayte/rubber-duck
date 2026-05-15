@@ -67,25 +67,7 @@ pub fn get_conversation(
     session_id: String,
 ) -> Result<Vec<ConversationMessage>, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, role, content, created_at FROM conversations
-             WHERE session_id = ?1 ORDER BY created_at ASC",
-        )
-        .map_err(|e| e.to_string())?;
-    let messages = stmt
-        .query_map(rusqlite::params![session_id], |row| {
-            Ok(ConversationMessage {
-                id: row.get(0)?,
-                role: row.get(1)?,
-                content: row.get(2)?,
-                created_at: row.get(3)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-    Ok(messages)
+    super::conversation_store::list_by_session(&conn, &session_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
