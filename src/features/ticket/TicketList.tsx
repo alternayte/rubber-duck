@@ -24,6 +24,8 @@ export function TicketList({ sessionId }: TicketListProps) {
   const [editingTitle, setEditingTitle] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [editingDesc, setEditingDesc] = useState("");
+  const [editingAC, setEditingAC] = useState("");
 
   useEffect(() => {
     loadTickets(sessionId);
@@ -208,8 +210,13 @@ export function TicketList({ sessionId }: TicketListProps) {
                     <textarea
                       className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
                       rows={3}
-                      value={ticket.description}
-                      onChange={(e) => updateTicket(ticket.id, sessionId, { description: e.target.value })}
+                      value={editingDesc}
+                      onChange={(e) => setEditingDesc(e.target.value)}
+                      onBlur={() => {
+                        if (editingDesc !== ticket.description) {
+                          updateTicket(ticket.id, sessionId, { description: editingDesc });
+                        }
+                      }}
                     />
                   </div>
                   <div>
@@ -217,8 +224,13 @@ export function TicketList({ sessionId }: TicketListProps) {
                     <textarea
                       className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
                       rows={3}
-                      value={ticket.acceptance_criteria}
-                      onChange={(e) => updateTicket(ticket.id, sessionId, { acceptance_criteria: e.target.value })}
+                      value={editingAC}
+                      onChange={(e) => setEditingAC(e.target.value)}
+                      onBlur={() => {
+                        if (editingAC !== ticket.acceptance_criteria) {
+                          updateTicket(ticket.id, sessionId, { acceptance_criteria: editingAC });
+                        }
+                      }}
                     />
                   </div>
                 </div>
@@ -227,7 +239,15 @@ export function TicketList({ sessionId }: TicketListProps) {
               {/* Click to expand/collapse (only if not editing title) */}
               {editingTitleId !== ticket.id && (
                 <button
-                  onClick={() => setExpandedId(expandedId === ticket.id ? null : ticket.id)}
+                  onClick={() => {
+                    if (expandedId === ticket.id) {
+                      setExpandedId(null);
+                    } else {
+                      setExpandedId(ticket.id);
+                      setEditingDesc(ticket.description);
+                      setEditingAC(ticket.acceptance_criteria);
+                    }
+                  }}
                   className="mt-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground"
                 >
                   {expandedId === ticket.id ? "collapse" : "details..."}
