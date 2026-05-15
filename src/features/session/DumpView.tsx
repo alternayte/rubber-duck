@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -92,6 +92,20 @@ export function DumpView({ sessionId }: DumpViewProps) {
     };
   }, []);
 
+  async function handleImagePaste(base64: string): Promise<string | null> {
+    try {
+      const filePath = await invoke<string>("save_pasted_image", {
+        sessionId,
+        base64Data: base64,
+      });
+      const assetUrl = convertFileSrc(filePath, "rdimg");
+      return `\n![pasted image](${assetUrl})\n`;
+    } catch (e) {
+      console.error("Failed to save image:", e);
+      return null;
+    }
+  }
+
   async function handleExtractTickets() {
     if (!apiKeySet || isStreaming || extracting) return;
     setExtracting(true);
@@ -182,6 +196,7 @@ Only extract tickets that are clearly implied by the notes. Don't invent work th
           <MarkdownEditor
             value={content}
             onChange={handleChange}
+            onImagePaste={handleImagePaste}
             placeholder="Brain dump here... markdown supported"
           />
         ) : (

@@ -79,13 +79,11 @@ The core loop: brain dump → chat with LLM → get grilled → extract tickets.
 - [x] Error handling: parsing failures shown inline, LLM errors caught via event listener
 
 ### Task 1.8 — Basic image paste support
-- [ ] Handle clipboard paste of images in the notes editor (CodeMirror paste event)
-- [ ] Save pasted image to app data directory (`{app_data}/images/{uuid}.png`)
-- [ ] Insert markdown image link at cursor: `![pasted image](rubber-duck://images/{uuid}.png)`
-- [ ] Register Tauri custom protocol (`rubber-duck://`) to serve local images to the webview
-- [ ] Display pasted images inline in the markdown preview
-- [ ] Tauri command: `save_image(session_id, base64_data) -> image_path`
-- [ ] Error handling: unsupported formats, disk full
+- [x] CodeMirror paste handler intercepts image clipboard data, reads as base64
+- [x] `save_pasted_image` Tauri command: base64 decode → save to `{app_data}/images/{session_id}/{uuid}.png`
+- [x] Custom `rdimg://` URI scheme protocol serves local images to webview
+- [x] Insert `![pasted image](rdimg://localhost/path)` at cursor via `convertFileSrc`
+- [x] Images render inline in markdown preview via react-markdown
 
 > **Scope:** Just clipboard paste → save → show inline. No drag-drop, no thumbnails, no LLM vision, no attachment panel. Those stay in Phase 7.
 

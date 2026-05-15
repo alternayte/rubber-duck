@@ -11,17 +11,21 @@ interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  onImagePaste?: (base64: string) => Promise<string | null>;
 }
 
 export function MarkdownEditor({
   value,
   onChange,
   placeholder = "Start typing...",
+  onImagePaste,
 }: MarkdownEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onImagePasteRef = useRef(onImagePaste);
+  onImagePasteRef.current = onImagePaste;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -40,6 +44,35 @@ export function MarkdownEditor({
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString());
           }
+        }),
+        EditorView.domEventHandlers({
+          paste(event, view) {
+            const items = event.clipboardData?.items;
+            if (!items) return false;
+
+            for (const item of items) {
+              if (item.type.startsWith("image/")) {
+                event.preventDefault();
+                const file = item.getAsFile();
+                if (!file || !onImagePasteRef.current) return true;
+
+                const reader = new FileReader();
+                reader.onload = async () => {
+                  const base64 = reader.result as string;
+                  const markdownText = await onImagePasteRef.current!(base64);
+                  if (markdownText) {
+                    const cursor = view.state.selection.main.head;
+                    view.dispatch({
+                      changes: { from: cursor, insert: markdownText },
+                    });
+                  }
+                };
+                reader.readAsDataURL(file);
+                return true;
+              }
+            }
+            return false;
+          },
         }),
         EditorView.theme({
           "&": {

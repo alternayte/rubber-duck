@@ -1,3 +1,4 @@
+use tauri::Manager;
 use tauri::State;
 
 use crate::db::Database;
@@ -85,4 +86,19 @@ pub fn get_conversation(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     Ok(messages)
+}
+
+#[tauri::command]
+pub fn save_pasted_image(
+    app: tauri::AppHandle,
+    session_id: String,
+    base64_data: String,
+) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let dir_str = app_data_dir.to_string_lossy().to_string();
+    super::image_store::save_image(&dir_str, &session_id, &base64_data)
+        .map_err(|e| e.to_string())
 }
