@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::error::{AppError, AppResult};
 use super::model::{
     CreateIssueFields, CreateIssueRequest, IssueTypeRef, ProjectRef,
-    JiraAuth, JiraErrorResponse, JiraUser, CreateIssueResponse,
+    JiraAuth, JiraErrorResponse, JiraUser, CreateIssueResponse, JiraProject,
 };
 use crate::ticket::model::ExternalRef;
 
@@ -86,6 +86,24 @@ impl JiraClient {
                 key: created.key,
                 url: browse_url,
             });
+        }
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        let message = parse_jira_error(&body, status.as_u16());
+        Err(AppError::Other(message))
+    }
+
+    pub async fn get_projects(&self) -> AppResult<Vec<JiraProject>> {
+        let url = format!("{}/rest/api/2/project", self.base_url);
+        let response = self
+            .apply_auth(self.client.get(&url))
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let projects: Vec<JiraProject> = response.json().await?;
+            return Ok(projects);
         }
 
         let status = response.status();
@@ -264,6 +282,52 @@ mod tests {
             err.contains("Authentication failed"),
             "Expected auth error, got: {err}"
         );
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn get_projects_success() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/rest/api/2/project")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"[{"key":"FRONT","name":"Frontiers"},{"key":"INFRA","name":"Infrastructure","extra":"ignored"}]"#)
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "test@example.com".to_string(),
+            api_token: "token".to_string(),
+        }).unwrap();
+        let projects = client.get_projects().await.unwrap();
+
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].key, "FRONT");
+        assert_eq!(projects[0].name, "Frontiers");
+        assert_eq!(projects[1].key, "INFRA");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn get_projects_auth_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/rest/api/2/project")
+            .with_status(401)
+            .with_body("")
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "bad@example.com".to_string(),
+            api_token: "wrong".to_string(),
+        }).unwrap();
+        let result = client.get_projects().await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Authentication failed"), "Expected auth error, got: {err}");
         mock.assert_async().await;
     }
 

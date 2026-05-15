@@ -53,3 +53,9 @@ pub struct JiraErrorResponse {
     #[serde(default)]
     pub errors: std::collections::HashMap<String, String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JiraProject {
+    pub key: String,
+    pub name: String,
+}
