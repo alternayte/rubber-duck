@@ -2,7 +2,11 @@ use reqwest::Client;
 use std::time::Duration;
 
 use crate::error::{AppError, AppResult};
-use super::model::{JiraUser, JiraErrorResponse};
+use super::model::{
+    CreateIssueFields, CreateIssueRequest, IssueTypeRef, ProjectRef,
+    JiraErrorResponse, JiraUser, CreateIssueResponse,
+};
+use crate::ticket::model::ExternalRef;
 
 pub struct JiraClient {
     client: Client,
@@ -36,6 +40,51 @@ impl JiraClient {
         if response.status().is_success() {
             let user: JiraUser = response.json().await?;
             return Ok(user);
+        }
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        let message = parse_jira_error(&body, status.as_u16());
+        Err(AppError::Other(message))
+    }
+
+    pub async fn create_issue(
+        &self,
+        project_key: &str,
+        summary: &str,
+        description: &str,
+        issue_type: &str,
+    ) -> AppResult<ExternalRef> {
+        let url = format!("{}/rest/api/2/issue", self.base_url);
+        let body = CreateIssueRequest {
+            fields: CreateIssueFields {
+                project: ProjectRef {
+                    key: project_key.to_string(),
+                },
+                summary: summary.to_string(),
+                description: description.to_string(),
+                issuetype: IssueTypeRef {
+                    name: issue_type.to_string(),
+                },
+            },
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .basic_auth(&self.email, Some(&self.api_token))
+            .json(&body)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let created: CreateIssueResponse = response.json().await?;
+            let browse_url = format!("{}/browse/{}", self.base_url, created.key);
+            return Ok(ExternalRef {
+                platform: "jira".to_string(),
+                key: created.key,
+                url: browse_url,
+            });
         }
 
         let status = response.status();
@@ -127,6 +176,74 @@ mod tests {
         assert!(
             err.contains("Authentication failed"),
             "Expected auth fallback message, got: {err}"
+        );
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn create_issue_success() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/rest/api/2/issue")
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"id":"10001","key":"PROJ-42","self":"https://site.atlassian.net/rest/api/2/issue/10001"}"#)
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), "test@example.com", "token").unwrap();
+        let ext_ref = client
+            .create_issue("PROJ", "Fix the bug", "It's broken", "Bug")
+            .await
+            .unwrap();
+
+        assert_eq!(ext_ref.platform, "jira");
+        assert_eq!(ext_ref.key, "PROJ-42");
+        assert!(ext_ref.url.contains("/browse/PROJ-42"));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn create_issue_validation_error() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/rest/api/2/issue")
+            .with_status(400)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"errorMessages":[],"errors":{"project":"project is required"}}"#)
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), "test@example.com", "token").unwrap();
+        let result = client.create_issue("BAD", "Title", "Desc", "Task").await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("project is required"),
+            "Expected field error, got: {err}"
+        );
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn create_issue_auth_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/rest/api/2/issue")
+            .with_status(401)
+            .with_body("")
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), "bad@example.com", "wrong").unwrap();
+        let result = client.create_issue("PROJ", "Title", "Desc", "Task").await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Authentication failed"),
+            "Expected auth error, got: {err}"
         );
         mock.assert_async().await;
     }
