@@ -25,6 +25,7 @@ pub fn set(conn: &Connection, key: &str, value: &str, category: &str) -> AppResu
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn get_by_category(conn: &Connection, category: &str) -> AppResult<Vec<(String, String)>> {
     let mut stmt = conn.prepare(
         "SELECT key, value FROM settings WHERE category = ?1 ORDER BY key",

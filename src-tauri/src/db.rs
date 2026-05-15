@@ -34,6 +34,7 @@ impl Database {
         Self::init(conn)
     }
 
+    #[cfg(test)]
     pub fn open_in_memory() -> AppResult<Self> {
         let conn = Connection::open_in_memory()?;
         Self::init(conn)

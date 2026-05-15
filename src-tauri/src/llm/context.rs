@@ -54,7 +54,8 @@ pub fn assemble_context(
         let mut ticket_text = String::from("## Current Tickets\n");
         for (title, ticket_type, priority, description) in tickets {
             let desc_preview = if description.len() > 100 {
-                format!("{}...", &description[..100])
+                let truncated: String = description.chars().take(100).collect();
+                format!("{truncated}...")
             } else {
                 description.clone()
             };
@@ -154,5 +155,21 @@ mod tests {
         assert_eq!(messages.len(), 1);
         assert!(messages[0].content.contains("critical technical reviewer"));
         assert!(!messages[0].content.contains("rubber-duck"));
+    }
+
+    #[test]
+    fn truncates_long_descriptions_without_utf8_panic() {
+        // '€' is 3 bytes (E2 82 AC); 40 repetitions = 120 bytes total
+        // byte index 100 falls inside a '€' char — byte-slicing [..100] would panic
+        let description = "\u{20ac}".repeat(40);
+        let tickets = vec![(
+            "Test".to_string(),
+            "Task".to_string(),
+            "High".to_string(),
+            description,
+        )];
+        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[]);
+        assert!(messages[0].content.contains("Test"));
+        assert!(messages[0].content.contains("..."));
     }
 }

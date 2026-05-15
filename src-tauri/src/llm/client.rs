@@ -1,6 +1,7 @@
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::error::{AppError, AppResult};
@@ -57,7 +58,10 @@ async fn stream_inner(
     messages: Vec<ChatMessage>,
     tx: &mpsc::Sender<StreamEvent>,
 ) -> AppResult<()> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|e| AppError::Other(format!("Failed to create HTTP client: {e}")))?;
     let response = client
         .post(OPENROUTER_URL)
         .header("Authorization", format!("Bearer {api_key}"))

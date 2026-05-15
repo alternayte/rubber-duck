@@ -70,6 +70,7 @@ pub fn archive(conn: &Connection, id: &str) -> AppResult<Session> {
     get(conn, id)
 }
 
+#[allow(dead_code)]
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     conn.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
     Ok(())
