@@ -33,5 +33,11 @@ export function useTicketActions() {
     await loadTickets(sessionId);
   }
 
-  return { loadTickets, createTicket, updateTicket, deleteTicket, reorderTicket };
+  async function pushToJira(ticketId: string, sessionId: string, projectKey: string) {
+    const ticket = await invoke<Ticket>("push_ticket_to_jira", { ticketId, projectKey });
+    await loadTickets(sessionId);
+    return ticket;
+  }
+
+  return { loadTickets, createTicket, updateTicket, deleteTicket, reorderTicket, pushToJira };
 }
