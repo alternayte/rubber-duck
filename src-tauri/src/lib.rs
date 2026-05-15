@@ -98,6 +98,7 @@ pub fn run() {
             has_jira_config,
             test_jira_connection,
             push_ticket_to_jira,
+            get_jira_projects,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;

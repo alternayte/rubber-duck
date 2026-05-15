@@ -6,7 +6,7 @@ use crate::error::AppError;
 use crate::settings::store as settings_store;
 
 use super::client::JiraClient;
-use super::model::{JiraAuth, JiraUser};
+use super::model::{JiraAuth, JiraUser, JiraProject};
 
 const KEYRING_SERVICE: &str = "rubber-duck";
 const JIRA_KEYRING_USER: &str = "jira-api-token";
@@ -146,4 +146,11 @@ pub async fn push_ticket_to_jira(
     let conn = db.conn().map_err(|e| e.to_string())?;
     crate::ticket::store::set_external_ref(&conn, &ticket_id, Some(&ext_ref_json))
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_jira_projects(db: State<'_, Database>) -> Result<Vec<JiraProject>, String> {
+    let (base_url, auth) = get_jira_credentials(&db)?;
+    let client = JiraClient::new(&base_url, auth).map_err(|e| e.to_string())?;
+    client.get_projects().await.map_err(|e| e.to_string())
 }
