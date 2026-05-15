@@ -38,3 +38,14 @@ export interface UpdateTicketParams {
   status?: string;
   parent_id?: string;
 }
+
+export interface JiraProject {
+  key: string;
+  name: string;
+}
+
+export interface ExternalRef {
+  platform: string;
+  key: string;
+  url: string;
+}
