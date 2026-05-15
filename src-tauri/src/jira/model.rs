@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone)]
+pub enum JiraAuth {
+    Basic { email: String, api_token: String },
+    Pat(String),
+}
+
 #[derive(Debug, Serialize)]
 pub struct CreateIssueRequest {
     pub fields: CreateIssueFields,
@@ -26,8 +32,11 @@ pub struct IssueTypeRef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraUser {
-    pub account_id: String,
+    #[serde(default)]
+    pub account_id: Option<String>,
     pub display_name: String,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -4,36 +4,39 @@ use std::time::Duration;
 use crate::error::{AppError, AppResult};
 use super::model::{
     CreateIssueFields, CreateIssueRequest, IssueTypeRef, ProjectRef,
-    JiraErrorResponse, JiraUser, CreateIssueResponse,
+    JiraAuth, JiraErrorResponse, JiraUser, CreateIssueResponse,
 };
 use crate::ticket::model::ExternalRef;
 
 pub struct JiraClient {
     client: Client,
     base_url: String,
-    email: String,
-    api_token: String,
+    auth: JiraAuth,
 }
 
 impl JiraClient {
-    pub fn new(base_url: &str, email: &str, api_token: &str) -> AppResult<Self> {
+    pub fn new(base_url: &str, auth: JiraAuth) -> AppResult<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .build()?;
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
-            email: email.to_string(),
-            api_token: api_token.to_string(),
+            auth,
         })
+    }
+
+    fn apply_auth(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.auth {
+            JiraAuth::Basic { email, api_token } => builder.basic_auth(email, Some(api_token)),
+            JiraAuth::Pat(token) => builder.bearer_auth(token),
+        }
     }
 
     pub async fn test_connection(&self) -> AppResult<JiraUser> {
         let url = format!("{}/rest/api/2/myself", self.base_url);
         let response = self
-            .client
-            .get(&url)
-            .basic_auth(&self.email, Some(&self.api_token))
+            .apply_auth(self.client.get(&url))
             .send()
             .await?;
 
@@ -70,9 +73,7 @@ impl JiraClient {
         };
 
         let response = self
-            .client
-            .post(&url)
-            .basic_auth(&self.email, Some(&self.api_token))
+            .apply_auth(self.client.post(&url))
             .json(&body)
             .send()
             .await?;
@@ -108,7 +109,7 @@ fn parse_jira_error(body: &str, status: u16) -> String {
     }
 
     match status {
-        401 => "Authentication failed — check your email and API token".to_string(),
+        401 => "Authentication failed — check your credentials".to_string(),
         403 => "Permission denied — check your Jira permissions".to_string(),
         404 => "Jira site not found — check your base URL".to_string(),
         _ => format!("Jira API error (HTTP {status})"),
@@ -130,11 +131,14 @@ mod tests {
             .create_async()
             .await;
 
-        let client = JiraClient::new(&server.url(), "test@example.com", "token").unwrap();
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "test@example.com".to_string(),
+            api_token: "token".to_string(),
+        }).unwrap();
         let user = client.test_connection().await.unwrap();
 
         assert_eq!(user.display_name, "Test User");
-        assert_eq!(user.account_id, "abc123");
+        assert_eq!(user.account_id, Some("abc123".to_string()));
         mock.assert_async().await;
     }
 
@@ -149,7 +153,10 @@ mod tests {
             .create_async()
             .await;
 
-        let client = JiraClient::new(&server.url(), "bad@example.com", "wrong").unwrap();
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "bad@example.com".to_string(),
+            api_token: "wrong".to_string(),
+        }).unwrap();
         let result = client.test_connection().await;
 
         assert!(result.is_err());
@@ -168,13 +175,16 @@ mod tests {
             .create_async()
             .await;
 
-        let client = JiraClient::new(&server.url(), "bad@example.com", "wrong").unwrap();
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "bad@example.com".to_string(),
+            api_token: "wrong".to_string(),
+        }).unwrap();
         let result = client.test_connection().await;
 
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("Authentication failed"),
+            err.contains("check your credentials"),
             "Expected auth fallback message, got: {err}"
         );
         mock.assert_async().await;
@@ -191,7 +201,10 @@ mod tests {
             .create_async()
             .await;
 
-        let client = JiraClient::new(&server.url(), "test@example.com", "token").unwrap();
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "test@example.com".to_string(),
+            api_token: "token".to_string(),
+        }).unwrap();
         let ext_ref = client
             .create_issue("PROJ", "Fix the bug", "It's broken", "Bug")
             .await
@@ -214,7 +227,10 @@ mod tests {
             .create_async()
             .await;
 
-        let client = JiraClient::new(&server.url(), "test@example.com", "token").unwrap();
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "test@example.com".to_string(),
+            api_token: "token".to_string(),
+        }).unwrap();
         let result = client.create_issue("BAD", "Title", "Desc", "Task").await;
 
         assert!(result.is_err());
@@ -236,7 +252,10 @@ mod tests {
             .create_async()
             .await;
 
-        let client = JiraClient::new(&server.url(), "bad@example.com", "wrong").unwrap();
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "bad@example.com".to_string(),
+            api_token: "wrong".to_string(),
+        }).unwrap();
         let result = client.create_issue("PROJ", "Title", "Desc", "Task").await;
 
         assert!(result.is_err());
@@ -245,6 +264,31 @@ mod tests {
             err.contains("Authentication failed"),
             "Expected auth error, got: {err}"
         );
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_connection_with_pat() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/rest/api/2/myself")
+            .match_header("authorization", "Bearer my-pat-token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"displayName":"Server User","name":"jdoe"}"#)
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(
+            &server.url(),
+            JiraAuth::Pat("my-pat-token".to_string()),
+        )
+        .unwrap();
+        let user = client.test_connection().await.unwrap();
+
+        assert_eq!(user.display_name, "Server User");
+        assert_eq!(user.name, Some("jdoe".to_string()));
+        assert_eq!(user.account_id, None);
         mock.assert_async().await;
     }
 }

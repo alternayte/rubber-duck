@@ -6,7 +6,7 @@ use crate::error::AppError;
 use crate::settings::store as settings_store;
 
 use super::client::JiraClient;
-use super::model::JiraUser;
+use super::model::{JiraAuth, JiraUser};
 
 const KEYRING_SERVICE: &str = "rubber-duck";
 const JIRA_KEYRING_USER: &str = "jira-api-token";
@@ -85,7 +85,7 @@ pub fn has_jira_config(db: State<Database>) -> Result<bool, String> {
 #[tauri::command]
 pub async fn test_jira_connection(db: State<'_, Database>) -> Result<JiraUser, String> {
     let (base_url, email, api_token) = get_jira_credentials(&db)?;
-    let client = JiraClient::new(&base_url, &email, &api_token).map_err(|e| e.to_string())?;
+    let client = JiraClient::new(&base_url, JiraAuth::Basic { email, api_token }).map_err(|e| e.to_string())?;
     client.test_connection().await.map_err(|e| e.to_string())
 }
 
@@ -96,7 +96,7 @@ pub async fn push_ticket_to_jira(
     project_key: String,
 ) -> Result<crate::ticket::model::Ticket, String> {
     let (base_url, email, api_token) = get_jira_credentials(&db)?;
-    let client = JiraClient::new(&base_url, &email, &api_token).map_err(|e| e.to_string())?;
+    let client = JiraClient::new(&base_url, JiraAuth::Basic { email, api_token }).map_err(|e| e.to_string())?;
 
     let ticket = {
         let conn = db.conn().map_err(|e| e.to_string())?;
