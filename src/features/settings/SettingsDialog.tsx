@@ -122,8 +122,8 @@ export function SettingsDialog() {
     }
 
     try {
-      const user = await invoke<{ display_name: string }>("test_jira_connection");
-      setConnectionResult({ ok: true, message: `Connected as ${user.display_name}` });
+      const user = await invoke<{ displayName: string }>("test_jira_connection");
+      setConnectionResult({ ok: true, message: `Connected as ${user.displayName}` });
       setJiraHasToken(true);
       setJiraConfigured(true);
 
@@ -138,25 +138,30 @@ export function SettingsDialog() {
 
   async function handleSaveJira() {
     setSavingJira(true);
-    await invoke("set_jira_config", {
-      baseUrl: jiraBaseUrl.trim(),
-      authMethod: jiraAuthMethod,
-      email: jiraAuthMethod === "basic" ? jiraEmail.trim() : null,
-    });
-    if (jiraToken) {
-      await invoke("set_jira_api_token", { key: jiraToken });
-      setJiraHasToken(true);
-    }
-    if (jiraDefaultProject) {
-      await invoke("set_setting", {
-        key: "jira.default_project",
-        value: jiraDefaultProject,
-        category: "jira",
+    try {
+      await invoke("set_jira_config", {
+        baseUrl: jiraBaseUrl.trim(),
+        authMethod: jiraAuthMethod,
+        email: jiraAuthMethod === "basic" ? jiraEmail.trim() : null,
       });
+      if (jiraToken) {
+        await invoke("set_jira_api_token", { key: jiraToken });
+        setJiraHasToken(true);
+      }
+      if (jiraDefaultProject) {
+        await invoke("set_setting", {
+          key: "jira.default_project",
+          value: jiraDefaultProject,
+          category: "jira",
+        });
+      }
+      const has = await invoke<boolean>("has_jira_config");
+      setJiraConfigured(has);
+    } catch (err) {
+      setConnectionResult({ ok: false, message: String(err) });
+    } finally {
+      setSavingJira(false);
     }
-    const has = await invoke<boolean>("has_jira_config");
-    setJiraConfigured(has);
-    setSavingJira(false);
   }
 
   return (
