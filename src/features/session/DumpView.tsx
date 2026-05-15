@@ -3,12 +3,12 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { TicketList } from "@/features/ticket/TicketList";
 import { apiKeySetAtom } from "@/features/settings/settings.atoms";
-import { chatModeAtom, isStreamingAtom } from "@/features/chat/chat.atoms";
+import { chatModeAtom, isExtractingAtom, isStreamingAtom } from "@/features/chat/chat.atoms";
 import { useTicketActions } from "@/features/ticket/useTicketActions";
 import { parseTicketsFromResponse } from "@/features/ticket/extractTickets";
 
@@ -39,7 +39,7 @@ export function DumpView({ sessionId }: DumpViewProps) {
   const isStreaming = useAtomValue(isStreamingAtom);
   const chatMode = useAtomValue(chatModeAtom);
   const { createTicket } = useTicketActions();
-  const [extracting, setExtracting] = useState(false);
+  const [extracting, setExtracting] = useAtom(isExtractingAtom);
   const [extractError, setExtractError] = useState<string | null>(null);
 
   useEffect(() => {

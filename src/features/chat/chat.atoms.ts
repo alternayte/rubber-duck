@@ -5,3 +5,4 @@ export const chatModeAtom = atom<"assist" | "grill">("assist");
 export const isStreamingAtom = atom(false);
 export const streamingContentAtom = atom("");
 export const conversationAtom = atom<ConversationMessage[]>([]);
+export const isExtractingAtom = atom(false);

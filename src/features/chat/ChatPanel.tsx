@@ -11,6 +11,7 @@ import { apiKeySetAtom, settingsOpenAtom } from "@/features/settings/settings.at
 import {
   chatModeAtom,
   conversationAtom,
+  isExtractingAtom,
   isStreamingAtom,
   streamingContentAtom,
 } from "./chat.atoms";
@@ -34,6 +35,12 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const listRef = useRef<HTMLDivElement>(null);
+  const isExtractingRef = useRef(false);
+  const isExtracting = useAtomValue(isExtractingAtom);
+
+  useEffect(() => {
+    isExtractingRef.current = isExtracting;
+  }, [isExtracting]);
 
   const scrollToBottom = useCallback(() => {
     if (shouldAutoScroll.current) {
@@ -66,6 +73,7 @@ export function ChatPanel() {
     }).then((unlisten) => unlisteners.push(unlisten));
 
     listen<{ full_content: string }>("llm:done", () => {
+      if (isExtractingRef.current) return;
       setIsStreaming(false);
       setStreamingContent("");
       if (activeSession) {
