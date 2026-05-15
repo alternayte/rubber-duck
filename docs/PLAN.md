@@ -126,13 +126,18 @@ Minimal Jira integration — enough to push tickets, not a full sync platform.
 > **Test count after Task 2.1:** 51 tests (44 pre-existing + 2 ExternalRef store + 3 test_connection + 1 PAT + 3 create_issue)
 
 ### Task 2.2 — Push UI
-- [ ] Jira connection settings in the settings dialog (base URL, email, API token in keychain)
-- [ ] "Push to Jira" button on individual tickets
-- [ ] Project picker (fetch from Jira API)
-- [ ] Show pushed status with link to Jira issue
-- [ ] Error states: connection failed, auth invalid, push rejected — clear user-facing messages
+- [x] Jira connection settings in the settings dialog (base URL, auth method, email, API token in keychain)
+- [x] "Push to Jira" button on individual tickets (hover action row, with spinner + inline errors)
+- [x] Project picker (searchable combobox, fetched from Jira API on successful test connection)
+- [x] Show pushed status with link to Jira issue (clickable Jira key opens in browser)
+- [x] Error states: connection failed, auth invalid, push rejected — clear inline messages with dismiss
+- [x] New backend command: `get_jira_projects` (GET /rest/api/2/project, 2 tests)
+- [x] Jotai atoms: `jiraConfiguredAtom`, `jiraDefaultProjectAtom` for cross-component state
+- [x] shadcn/ui Combobox component (Popover + Command + cmdk) for searchable project selection
 
 > **Deliberately slim:** No ADF conversion, no field mapping UI, no batch push, no epic linking to Jira. Those come after dogfooding reveals what's actually needed.
+
+> **Test count after Task 2.2:** 53 tests (51 pre-existing + 2 get_projects)
 
 **Milestone: Can push tickets to Jira. The full dogfooding loop is complete.**
 
