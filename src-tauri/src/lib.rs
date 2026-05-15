@@ -3,6 +3,7 @@ mod error;
 mod llm;
 mod session;
 mod settings;
+mod jira;
 mod ticket;
 
 use tauri::Manager;

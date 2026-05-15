@@ -7,6 +7,8 @@ pub enum AppError {
     #[error("{0}")]
     Io(#[from] std::io::Error),
     #[error("{0}")]
+    Http(#[from] reqwest::Error),
+    #[error("{0}")]
     Other(String),
     #[error("Keyring error: {0}")]
     Keyring(String),
