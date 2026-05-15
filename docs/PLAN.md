@@ -112,12 +112,18 @@ The core loop: brain dump → chat with LLM → get grilled → extract tickets.
 Minimal Jira integration — enough to push tickets, not a full sync platform.
 
 ### Task 2.1 — Jira client
-- [ ] Implement `JiraClient` with reqwest: API token auth, base URL from settings
-- [ ] `test_connection` — GET /rest/api/3/myself
-- [ ] `push_ticket` — POST /rest/api/3/issue (summary + description only, no ADF for v1 — use plain text or simple markdown)
-- [ ] Store `ExternalRef` (Jira issue key + URL) on pushed tickets
-- [ ] Error handling: auth failures, network errors, field validation errors — all surfaced to user
-- [ ] Write tests with recorded HTTP responses
+- [x] Implement `JiraClient` with reqwest, base URL from settings
+- [x] `JiraAuth` enum: Basic Auth (Cloud: email + API token) and PAT (Server/DC: Bearer token)
+- [x] `test_connection` — GET /rest/api/2/myself (v2 to avoid ADF requirement)
+- [x] `create_issue` — POST /rest/api/2/issue (summary + description only, plain text via API v2)
+- [x] Store `ExternalRef` (Jira issue key + URL) as JSON in `tickets.external_ref` column
+- [x] Error handling: `parse_jira_error` extracts Jira structured errors, falls back to status-code messages (401/403/404)
+- [x] `JiraUser` handles both Cloud (`accountId`) and Server/DC (`name`) response formats
+- [x] 9 tests with mockito mock server (2 store + 3 test_connection + 1 PAT auth + 3 create_issue)
+- [x] Tauri commands: `get_jira_config`, `set_jira_config`, `set_jira_api_token`, `has_jira_config`, `test_jira_connection`, `push_ticket_to_jira`
+- [x] `auth_method` setting ("basic" or "pat") with backward-compatible default to "basic"
+
+> **Test count after Task 2.1:** 51 tests (44 pre-existing + 2 ExternalRef store + 3 test_connection + 1 PAT + 3 create_issue)
 
 ### Task 2.2 — Push UI
 - [ ] Jira connection settings in the settings dialog (base URL, email, API token in keychain)
