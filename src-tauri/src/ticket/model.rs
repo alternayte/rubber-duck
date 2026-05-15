@@ -43,3 +43,10 @@ pub struct UpdateTicketParams {
     pub status: Option<String>,
     pub parent_id: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalRef {
+    pub platform: String,
+    pub key: String,
+    pub url: String,
+}

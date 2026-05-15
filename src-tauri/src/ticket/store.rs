@@ -155,6 +155,14 @@ pub fn set_parent(conn: &Connection, id: &str, parent_id: Option<&str>) -> AppRe
     get(conn, id)
 }
 
+pub fn set_external_ref(conn: &Connection, id: &str, external_ref: Option<&str>) -> AppResult<Ticket> {
+    conn.execute(
+        "UPDATE tickets SET external_ref = ?1 WHERE id = ?2",
+        params![external_ref, id],
+    )?;
+    get(conn, id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,5 +346,41 @@ mod tests {
         assert!(ticket.estimate.is_none());
         assert!(ticket.parent_id.is_none());
         assert!(ticket.external_ref.is_none());
+    }
+
+    #[test]
+    fn set_and_read_external_ref() {
+        let db = test_db();
+        let conn = db.conn().unwrap();
+        let session_id = make_session(&conn);
+        let ticket = create(&conn, &minimal_params(&session_id, "Push me")).unwrap();
+
+        assert!(ticket.external_ref.is_none());
+
+        let ext_ref = serde_json::to_string(&super::super::model::ExternalRef {
+            platform: "jira".to_string(),
+            key: "PROJ-123".to_string(),
+            url: "https://site.atlassian.net/browse/PROJ-123".to_string(),
+        })
+        .unwrap();
+
+        set_external_ref(&conn, &ticket.id, Some(&ext_ref)).unwrap();
+        let updated = get(&conn, &ticket.id).unwrap();
+        assert_eq!(updated.external_ref, Some(ext_ref));
+    }
+
+    #[test]
+    fn clear_external_ref() {
+        let db = test_db();
+        let conn = db.conn().unwrap();
+        let session_id = make_session(&conn);
+        let ticket = create(&conn, &minimal_params(&session_id, "Push me")).unwrap();
+
+        let ext_ref = r#"{"platform":"jira","key":"PROJ-1","url":"https://x.atlassian.net/browse/PROJ-1"}"#;
+        set_external_ref(&conn, &ticket.id, Some(ext_ref)).unwrap();
+
+        set_external_ref(&conn, &ticket.id, None).unwrap();
+        let cleared = get(&conn, &ticket.id).unwrap();
+        assert!(cleared.external_ref.is_none());
     }
 }
