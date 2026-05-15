@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChatMode {
+    Assist,
+    Grill,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
@@ -10,15 +16,31 @@ const SYSTEM_PROMPT: &str = "You are a technical planning assistant embedded in 
 
 When asked to create tickets, produce structured JSON that the app can parse. When asked to review or improve, be specific and actionable.";
 
+const GRILL_PROMPT: &str = "You are a critical technical reviewer. Your job is to find gaps, ambiguities, missing edge cases, and unstated assumptions in the user's planning session.
+
+Read the current notes and tickets carefully. Then ask ONE focused question at a time. Be specific — reference actual content from their notes. Don't be generic.
+
+Examples of good questions:
+- \"You mention migrating the CDC pipeline but there's no ticket for schema migration — is that intentional or missing?\"
+- \"The acceptance criteria for ticket #3 say 'handles errors gracefully' — what does that mean specifically? Which error cases?\"
+- \"I see nothing about rollback strategy. What happens if this deployment fails halfway?\"
+
+Do not provide solutions unless asked. Your job is to find the holes.";
+
 const MAX_CONVERSATION_MESSAGES: usize = 40;
 
 pub fn assemble_context(
+    mode: &ChatMode,
     session_context: &str,
     note_content: &str,
     tickets: &[(String, String, String, String)], // (title, type, priority, description)
     conversation: &[(String, String)], // (role, content)
 ) -> Vec<ChatMessage> {
-    let mut system_parts = vec![SYSTEM_PROMPT.to_string()];
+    let base_prompt = match mode {
+        ChatMode::Assist => SYSTEM_PROMPT,
+        ChatMode::Grill => GRILL_PROMPT,
+    };
+    let mut system_parts = vec![base_prompt.to_string()];
 
     if !session_context.is_empty() {
         system_parts.push(format!("## Session Context\n{session_context}"));
@@ -73,7 +95,7 @@ mod tests {
 
     #[test]
     fn system_message_includes_prompt() {
-        let messages = assemble_context("", "", &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[]);
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, "system");
         assert!(messages[0].content.contains("rubber-duck"));
@@ -81,13 +103,13 @@ mod tests {
 
     #[test]
     fn includes_session_context() {
-        let messages = assemble_context("We are migrating the auth service", "", &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "We are migrating the auth service", "", &[], &[]);
         assert!(messages[0].content.contains("migrating the auth service"));
     }
 
     #[test]
     fn includes_note_content() {
-        let messages = assemble_context("", "# My brainstorm\nSome ideas here", &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "# My brainstorm\nSome ideas here", &[], &[]);
         assert!(messages[0].content.contains("My brainstorm"));
     }
 
@@ -96,7 +118,7 @@ mod tests {
         let tickets = vec![
             ("Fix login".to_string(), "Task".to_string(), "High".to_string(), "Auth is broken".to_string()),
         ];
-        let messages = assemble_context("", "", &tickets, &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[]);
         assert!(messages[0].content.contains("Fix login"));
         assert!(messages[0].content.contains("Task"));
     }
@@ -107,7 +129,7 @@ mod tests {
             ("User".to_string(), "Break this into tickets".to_string()),
             ("Assistant".to_string(), "Here are 3 tickets...".to_string()),
         ];
-        let messages = assemble_context("", "", &[], &conversation);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &conversation);
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].role, "user");
         assert_eq!(messages[2].role, "assistant");
@@ -121,8 +143,16 @@ mod tests {
                 (role.to_string(), format!("Message {i}"))
             })
             .collect();
-        let messages = assemble_context("", "", &[], &conversation);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &conversation);
         assert_eq!(messages.len(), 41); // system + 40 conversation
         assert!(messages[1].content.contains("Message 20")); // keeps LAST 40
+    }
+
+    #[test]
+    fn grill_mode_uses_different_prompt() {
+        let messages = assemble_context(&ChatMode::Grill, "", "", &[], &[]);
+        assert_eq!(messages.len(), 1);
+        assert!(messages[0].content.contains("critical technical reviewer"));
+        assert!(!messages[0].content.contains("rubber-duck"));
     }
 }

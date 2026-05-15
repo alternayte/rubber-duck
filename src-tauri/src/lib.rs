@@ -10,6 +10,7 @@ use tauri::Manager;
 use db::Database;
 use session::commands::*;
 use settings::commands::*;
+use ticket::commands::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,12 +24,20 @@ pub fn run() {
             archive_session,
             get_or_create_note,
             update_note,
+            get_conversation,
             get_setting,
             set_setting,
             set_api_key,
             has_api_key,
             get_available_models,
             llm::streaming::send_message,
+            create_ticket,
+            get_ticket,
+            list_tickets,
+            update_ticket,
+            delete_ticket,
+            reorder_ticket,
+            set_ticket_parent,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;

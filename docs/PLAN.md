@@ -49,37 +49,34 @@ The core loop: brain dump → chat with LLM → get grilled → extract tickets.
 - [x] `send_message` command: saves to DB → assembles context → streams response → saves result
 
 ### Task 1.6 — Duck chat panel + Grill mode
-- [ ] Frontend: chat panel in the side bar — message input, streaming response display, auto-scroll
-- [ ] Wire up: user sends message → streams response → renders in chat
-- [ ] Load and display conversation history on session select
-- [ ] Grill mode: Assist ↔ Grill toggle (already exists as UI placeholder)
-- [ ] Grill mode uses alternate system prompt (critical reviewer persona from PRD Section 9)
-- [ ] "No API key" state: show prompt to open settings when key isn't configured
-- [ ] Error handling: show error bubbles for API failures, rate limits, network errors
+- [x] Frontend: ChatPanel component with message list, streaming display, auto-scroll
+- [x] Tauri event listeners: `llm:chunk`, `llm:done`, `llm:error` with error classification
+- [x] Conversation history: `get_conversation` command, loads on session switch
+- [x] Grill mode: `ChatMode` enum, alternate system prompt, Assist/Grill toggle (7 context tests)
+- [x] No-API-key state: prompts user to open settings
+- [x] Error handling: inline error bubbles for API failures, rate limits, auth errors
 
 > **Why grill mode is here:** It's the differentiating feature. It's a system prompt swap + the toggle already exists. There's no reason to defer it to a later phase.
 
 ### Task 1.7a — Ticket model + CRUD
-- [ ] Define `Ticket` model with all fields from PRD (in `ticket/model.rs`)
-- [ ] Implement `ticket/store.rs`: create, get, list_by_session, update, delete, reorder, set_parent
-- [ ] Implement Tauri commands for ticket management
-- [ ] Write tests for store layer
-- [ ] Error handling: invalid parent_id, missing session
+- [x] Define `Ticket`, `CreateTicketParams`, `UpdateTicketParams` models (`ticket/model.rs`)
+- [x] Implement `ticket/store.rs`: create, get, list_by_session, update, delete, reorder, set_parent (7 tests)
+- [x] Implement 7 Tauri commands: create/get/list/update/delete/reorder/set_parent
+- [x] JSON field handling: labels and dependencies as `Vec<String>` ↔ JSON TEXT
+- [x] Cascade delete verified via session deletion test
 
 ### Task 1.7b — Ticket list UI
-- [ ] Frontend: ticket list in the Dump tab or side panel — show title, type, priority, estimate
-- [ ] Allow editing ticket fields inline
-- [ ] Delete ticket with confirmation
-- [ ] Reorder tickets via drag or up/down buttons
+- [x] Frontend: collapsible ticket list below editor in Dump tab (title, type, priority, estimate badges)
+- [x] Inline editing: click title to edit, click badges to cycle values, expandable description/AC
+- [x] Delete with window.confirm, "+ Add" button for manual ticket creation
+- [x] Up/down reorder buttons (visible on hover)
 
 ### Task 1.7c — LLM ticket extraction
-- [ ] Add "extract tickets" prompt template — button in chat or tab bar triggers a structured prompt
-- [ ] Parse structured output from LLM: expect JSON blocks with ticket fields
-- [ ] Handle messy LLM output gracefully: partial JSON, markdown-wrapped JSON, multiple tickets in one response
-- [ ] Create parsed tickets in the store, show them in the ticket list
-- [ ] Error handling: show what went wrong if parsing fails, let user retry
-
-> **Note on parsing:** LLM output is unreliable. The parser should be lenient — try JSON extraction from markdown code blocks, handle missing fields with defaults, and never crash on malformed output.
+- [x] "Extract Tickets" button in Dump tab header sends structured prompt to LLM
+- [x] Parser: extracts ```json code blocks, falls back to raw JSON, handles arrays + single objects
+- [x] Field normalization: validates title required, coerces priority/type/estimate against allowlists, defaults for missing fields
+- [x] Creates parsed tickets via `create_ticket`, ticket list refreshes automatically
+- [x] Error handling: parsing failures shown inline, LLM errors caught via event listener
 
 ### Task 1.8 — Basic image paste support
 - [ ] Handle clipboard paste of images in the notes editor (CodeMirror paste event)

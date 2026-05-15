@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::db::Database;
 
-use super::model::{Note, Session};
+use super::model::{ConversationMessage, Note, Session};
 use super::note_store;
 use super::store;
 
@@ -58,4 +58,31 @@ pub fn update_note(
 ) -> Result<Note, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     note_store::update_content(&conn, &id, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_conversation(
+    db: State<Database>,
+    session_id: String,
+) -> Result<Vec<ConversationMessage>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, role, content, created_at FROM conversations
+             WHERE session_id = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let messages = stmt
+        .query_map(rusqlite::params![session_id], |row| {
+            Ok(ConversationMessage {
+                id: row.get(0)?,
+                role: row.get(1)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(messages)
 }

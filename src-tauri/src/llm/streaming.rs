@@ -33,8 +33,15 @@ pub async fn send_message(
     db: State<'_, Database>,
     session_id: String,
     content: String,
+    mode: String,
 ) -> Result<(), String> {
     let api_key = get_api_key_from_keyring().map_err(|e| e.to_string())?;
+
+    let chat_mode = if mode == "grill" {
+        context::ChatMode::Grill
+    } else {
+        context::ChatMode::Assist
+    };
 
     let (messages, model) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
@@ -77,6 +84,7 @@ pub async fn send_message(
             .map_err(|e| e.to_string())?;
 
         let messages = context::assemble_context(
+            &chat_mode,
             &session.context,
             &note_content,
             &tickets,

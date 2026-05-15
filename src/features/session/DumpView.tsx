@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useAtomValue } from "jotai";
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { TicketList } from "@/features/ticket/TicketList";
+import { apiKeySetAtom } from "@/features/settings/settings.atoms";
+import { chatModeAtom, isStreamingAtom } from "@/features/chat/chat.atoms";
+import { useTicketActions } from "@/features/ticket/useTicketActions";
+import { parseTicketsFromResponse } from "@/features/ticket/extractTickets";
 
 interface Note {
   id: string;
@@ -27,6 +34,13 @@ export function DumpView({ sessionId }: DumpViewProps) {
   const [mode, setMode] = useState<ViewMode>("edit");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteIdRef = useRef<string | null>(null);
+
+  const apiKeySet = useAtomValue(apiKeySetAtom);
+  const isStreaming = useAtomValue(isStreamingAtom);
+  const chatMode = useAtomValue(chatModeAtom);
+  const { createTicket } = useTicketActions();
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +92,52 @@ export function DumpView({ sessionId }: DumpViewProps) {
     };
   }, []);
 
+  async function handleExtractTickets() {
+    if (!apiKeySet || isStreaming || extracting) return;
+    setExtracting(true);
+    setExtractError(null);
+
+    // Listen for the done event to parse tickets from the response
+    const unlisten = await listen<{ full_content: string }>("llm:done", async (event) => {
+      const { tickets, error } = parseTicketsFromResponse(event.payload.full_content, sessionId);
+      if (error) {
+        setExtractError(error);
+      } else {
+        for (const params of tickets) {
+          await createTicket(params);
+        }
+      }
+      setExtracting(false);
+      unlisten();
+    });
+
+    // Also listen for errors
+    const unlistenError = await listen<{ message: string }>("llm:error", () => {
+      setExtracting(false);
+      setExtractError("LLM request failed — try again");
+      unlisten();
+      unlistenError();
+    });
+
+    const extractPrompt = `Read my brain dump notes carefully and extract structured work tickets from them.
+
+Return the tickets as a JSON array inside a \`\`\`json code block. Each ticket object should have these fields:
+- "title": short descriptive title (required)
+- "description": detailed description of the work
+- "acceptance_criteria": what "done" looks like
+- "priority": one of "Low", "Medium", "High", "Critical"
+- "ticket_type": one of "Task", "Bug", "Story", "Epic"
+- "estimate": one of "XS", "S", "M", "L", "XL"
+
+Only extract tickets that are clearly implied by the notes. Don't invent work that isn't there.`;
+
+    await invoke("send_message", {
+      sessionId,
+      content: extractPrompt,
+      mode: chatMode,
+    });
+  }
+
   if (!note) {
     return (
       <p className="text-sm text-muted-foreground">Loading...</p>
@@ -101,9 +161,23 @@ export function DumpView({ sessionId }: DumpViewProps) {
         >
           Preview
         </Button>
+
+        <div className="ml-auto flex items-center gap-2">
+          {extractError && (
+            <span className="text-xs text-destructive-foreground">{extractError}</span>
+          )}
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={handleExtractTickets}
+            disabled={!apiKeySet || isStreaming || extracting}
+          >
+            {extracting ? "Extracting..." : "Extract Tickets"}
+          </Button>
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-[2] overflow-hidden">
         {mode === "edit" ? (
           <MarkdownEditor
             value={content}
@@ -120,6 +194,8 @@ export function DumpView({ sessionId }: DumpViewProps) {
           </div>
         )}
       </div>
+
+      <TicketList sessionId={sessionId} />
     </div>
   );
 }
