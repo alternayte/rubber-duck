@@ -16,26 +16,55 @@ use ticket::commands::*;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .register_uri_scheme_protocol("rdimg", |_ctx, request| {
+        .register_uri_scheme_protocol("rdimg", |ctx, request| {
+            let make_response = |status: u16, body: Vec<u8>, content_type: &str| {
+                tauri::http::Response::builder()
+                    .status(status)
+                    .header("Content-Type", content_type)
+                    .body(body)
+                    .unwrap_or_else(|_| tauri::http::Response::new(Vec::new()))
+            };
+
             let uri = request.uri();
             let decoded = percent_encoding::percent_decode_str(uri.path())
                 .decode_utf8_lossy()
                 .to_string();
-            // URI path starts with '/' on all platforms; strip it to get the absolute fs path
             let fs_path = if decoded.starts_with('/') {
-                decoded[1..].to_string()
+                &decoded[1..]
             } else {
-                decoded
+                &decoded
             };
-            match std::fs::read(&fs_path) {
-                Ok(bytes) => tauri::http::Response::builder()
-                    .header("Content-Type", "image/png")
-                    .body(bytes)
-                    .unwrap(),
-                Err(_) => tauri::http::Response::builder()
-                    .status(404)
-                    .body(Vec::new())
-                    .unwrap(),
+
+            let images_root = match ctx.app_handle().path().app_data_dir() {
+                Ok(dir) => dir.join("images"),
+                Err(_) => return make_response(500, Vec::new(), "text/plain"),
+            };
+
+            let canonical = match std::fs::canonicalize(fs_path) {
+                Ok(p) => p,
+                Err(_) => return make_response(404, Vec::new(), "text/plain"),
+            };
+
+            let canonical_root = match std::fs::canonicalize(&images_root) {
+                Ok(p) => p,
+                Err(_) => return make_response(404, Vec::new(), "text/plain"),
+            };
+
+            if !canonical.starts_with(&canonical_root) {
+                return make_response(403, Vec::new(), "text/plain");
+            }
+
+            let content_type = match canonical.extension().and_then(|e| e.to_str()) {
+                Some("png") => "image/png",
+                Some("jpg" | "jpeg") => "image/jpeg",
+                Some("gif") => "image/gif",
+                Some("webp") => "image/webp",
+                _ => "application/octet-stream",
+            };
+
+            match std::fs::read(&canonical) {
+                Ok(bytes) => make_response(200, bytes, content_type),
+                Err(_) => make_response(404, Vec::new(), "text/plain"),
             }
         })
         .invoke_handler(tauri::generate_handler![
