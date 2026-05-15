@@ -12,6 +12,7 @@ use db::Database;
 use session::commands::*;
 use settings::commands::*;
 use ticket::commands::*;
+use jira::commands::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -91,6 +92,12 @@ pub fn run() {
             reorder_ticket,
             set_ticket_parent,
             save_pasted_image,
+            get_jira_config,
+            set_jira_config,
+            set_jira_api_token,
+            has_jira_config,
+            test_jira_connection,
+            push_ticket_to_jira,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
