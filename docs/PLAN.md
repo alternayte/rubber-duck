@@ -87,6 +87,22 @@ The core loop: brain dump → chat with LLM → get grilled → extract tickets.
 
 > **Scope:** Just clipboard paste → save → show inline. No drag-drop, no thumbnails, no LLM vision, no attachment panel. Those stay in Phase 7.
 
+### Task 1.9 — Adversarial review hardening
+- [x] **Critical:** Fixed `rdimg://` path traversal — validates paths within `{app_data}/images/` via `canonicalize`
+- [x] **Critical:** Fixed silent data loss on conversation save — logs errors via `tracing::error!`, emits `llm:error`
+- [x] Created `session/conversation_store.rs` — centralized conversation persistence (2 tests)
+- [x] Enabled Content-Security-Policy in `tauri.conf.json`
+- [x] `rdimg://` handler detects content-type from file extension, no more hardcoded `image/png`
+- [x] Removed `unwrap()` from non-test code in URI scheme handler
+- [x] UTF-8 safe ticket description truncation (`chars().take(100)` instead of byte slicing)
+- [x] HTTP timeout (120s) on OpenRouter client
+- [x] Suppressed dead code warnings (`#[cfg(test)]` for `open_in_memory`, `#[allow(dead_code)]` for unused store functions)
+- [x] Wrapped `<App />` in Jotai `<Provider>`
+- [x] Fixed extract tickets race condition via shared `isExtractingAtom`
+- [x] Ticket textarea saves debounced to `onBlur` instead of every keystroke
+
+> **Test count after hardening:** 42 tests (39 original + 2 conversation_store + 1 UTF-8 truncation)
+
 **Milestone: Full core loop working. Brain dump (with images) → chat → grill → tickets.**
 
 ---
