@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
+import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ticketsAtom } from "./ticket.atoms";
 import { useTicketActions } from "./useTicketActions";
 import type { Ticket } from "./ticket.types";
-import { ChevronDown, ChevronRight, Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import type { ExternalRef } from "./ticket.types";
+import { ChevronDown, ChevronRight, Plus, Trash2, ArrowUp, ArrowDown, Upload, Loader2, X, ExternalLink } from "lucide-react";
+import { jiraConfiguredAtom, jiraDefaultProjectAtom, settingsOpenAtom } from "@/features/settings/settings.atoms";
 
 const PRIORITIES = ["Low", "Medium", "High", "Critical"];
 const TYPES = ["Task", "Bug", "Story", "Epic"];
@@ -17,7 +21,7 @@ interface TicketListProps {
 
 export function TicketList({ sessionId }: TicketListProps) {
   const tickets = useAtomValue(ticketsAtom);
-  const { loadTickets, createTicket, updateTicket, deleteTicket, reorderTicket } = useTicketActions();
+  const { loadTickets, createTicket, updateTicket, deleteTicket, reorderTicket, pushToJira } = useTicketActions();
   const [collapsed, setCollapsed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
@@ -26,10 +30,19 @@ export function TicketList({ sessionId }: TicketListProps) {
   const [newTitle, setNewTitle] = useState("");
   const [editingDesc, setEditingDesc] = useState("");
   const [editingAC, setEditingAC] = useState("");
+  const [jiraConfigured, setJiraConfigured] = useAtom(jiraConfiguredAtom);
+  const jiraDefaultProject = useAtomValue(jiraDefaultProjectAtom);
+  const [, setSettingsOpen] = useAtom(settingsOpenAtom);
+  const [pushingId, setPushingId] = useState<string | null>(null);
+  const [pushError, setPushError] = useState<{ id: string; message: string } | null>(null);
 
   useEffect(() => {
     loadTickets(sessionId);
   }, [sessionId]);
+
+  useEffect(() => {
+    invoke<boolean>("has_jira_config").then(setJiraConfigured);
+  }, []);
 
   async function handleCreate() {
     const title = newTitle.trim();
@@ -75,6 +88,31 @@ export function TicketList({ sessionId }: TicketListProps) {
   function handleMoveDown(ticket: Ticket, index: number) {
     if (index >= tickets.length - 1) return;
     reorderTicket(ticket.id, sessionId, tickets[index + 1].sort_order + 1);
+  }
+
+  async function handlePush(ticket: Ticket) {
+    if (!jiraDefaultProject) {
+      setPushError({ id: ticket.id, message: "Jira not configured." });
+      return;
+    }
+    setPushingId(ticket.id);
+    setPushError(null);
+    try {
+      await pushToJira(ticket.id, sessionId, jiraDefaultProject);
+    } catch (err) {
+      setPushError({ id: ticket.id, message: String(err) });
+    } finally {
+      setPushingId(null);
+    }
+  }
+
+  function parseExternalRef(ref: string | null): ExternalRef | null {
+    if (!ref) return null;
+    try {
+      return JSON.parse(ref);
+    } catch {
+      return null;
+    }
   }
 
   function priorityColor(priority: string) {
@@ -196,11 +234,62 @@ export function TicketList({ sessionId }: TicketListProps) {
                   <button onClick={() => handleMoveDown(ticket, index)} className="p-0.5 text-muted-foreground hover:text-foreground" disabled={index >= tickets.length - 1}>
                     <ArrowDown className="size-3" />
                   </button>
+                  {jiraConfigured && !parseExternalRef(ticket.external_ref) && pushingId !== ticket.id && (
+                    <button
+                      onClick={() => handlePush(ticket)}
+                      className="p-0.5 text-muted-foreground hover:text-blue-400"
+                      title="Push to Jira"
+                    >
+                      <Upload className="size-3" />
+                    </button>
+                  )}
                   <button onClick={() => handleDelete(ticket)} className="p-0.5 text-muted-foreground hover:text-red-400">
                     <Trash2 className="size-3" />
                   </button>
                 </div>
               </div>
+
+              {/* Jira status / push error */}
+              {(() => {
+                const extRef = parseExternalRef(ticket.external_ref);
+                if (pushingId === ticket.id) {
+                  return (
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Loader2 className="size-3 animate-spin" /> Pushing...
+                    </p>
+                  );
+                }
+                if (extRef) {
+                  return (
+                    <button
+                      onClick={() => openUrl(extRef.url)}
+                      className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 mt-0.5"
+                    >
+                      {extRef.key} <ExternalLink className="size-2.5" />
+                    </button>
+                  );
+                }
+                if (pushError?.id === ticket.id) {
+                  return (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {pushError.message === "Jira not configured." ? (
+                        <button
+                          onClick={() => setSettingsOpen(true)}
+                          className="text-[10px] text-yellow-400 hover:text-yellow-300"
+                        >
+                          ⚠ Jira not configured. Open Settings
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-red-400">✗ {pushError.message}</span>
+                      )}
+                      <button onClick={() => setPushError(null)} className="text-muted-foreground hover:text-foreground">
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Expandable description */}
               {expandedId === ticket.id && (
