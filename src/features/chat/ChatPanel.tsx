@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type React from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -17,10 +18,21 @@ import {
   streamingContentAtom,
 } from "./chat.atoms";
 import type { ConversationMessage } from "./chat.types";
+import { JiraLinkedText } from "@/components/JiraLinkedText";
 
 interface ErrorMessage {
   id: string;
   message: string;
+}
+
+function processChildren(children: React.ReactNode): React.ReactNode {
+  return Array.isArray(children)
+    ? children.map((child, i) =>
+        typeof child === "string" ? <JiraLinkedText key={i}>{child}</JiraLinkedText> : child,
+      )
+    : typeof children === "string"
+      ? <JiraLinkedText>{children}</JiraLinkedText>
+      : children;
 }
 
 export function ChatPanel() {
@@ -292,7 +304,13 @@ export function ChatPanel() {
                 </div>
               ) : (
                 <div className="prose prose-invert prose-sm max-w-none">
-                  <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                  <Markdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p>{processChildren(children)}</p>,
+                      li: ({ children }) => <li>{processChildren(children)}</li>,
+                    }}
+                  >{msg.content}</Markdown>
                 </div>
               )}
             </div>

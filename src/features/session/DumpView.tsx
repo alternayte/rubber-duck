@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type React from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
@@ -11,6 +12,7 @@ import { apiKeySetAtom } from "@/features/settings/settings.atoms";
 import { chatModeAtom, isExtractingAtom, isStreamingAtom } from "@/features/chat/chat.atoms";
 import { useTicketActions } from "@/features/ticket/useTicketActions";
 import { parseTicketsFromResponse } from "@/features/ticket/extractTickets";
+import { JiraLinkedText } from "@/components/JiraLinkedText";
 
 interface Note {
   id: string;
@@ -27,6 +29,16 @@ interface DumpViewProps {
 }
 
 const AUTOSAVE_DELAY_MS = 500;
+
+function processChildren(children: React.ReactNode): React.ReactNode {
+  return Array.isArray(children)
+    ? children.map((child, i) =>
+        typeof child === "string" ? <JiraLinkedText key={i}>{child}</JiraLinkedText> : child,
+      )
+    : typeof children === "string"
+      ? <JiraLinkedText>{children}</JiraLinkedText>
+      : children;
+}
 
 export function DumpView({ sessionId }: DumpViewProps) {
   const [note, setNote] = useState<Note | null>(null);
@@ -202,7 +214,13 @@ Only extract tickets that are clearly implied by the notes. Don't invent work th
         ) : (
           <div className="prose prose-invert prose-sm max-w-none overflow-auto h-full">
             {content ? (
-              <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children }) => <p>{processChildren(children)}</p>,
+                  li: ({ children }) => <li>{processChildren(children)}</li>,
+                }}
+              >{content}</Markdown>
             ) : (
               <p className="text-muted-foreground">Nothing here yet</p>
             )}
