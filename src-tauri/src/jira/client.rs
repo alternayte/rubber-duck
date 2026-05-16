@@ -1,10 +1,13 @@
 use reqwest::Client;
+use regex::Regex;
+use std::collections::HashSet;
 use std::time::Duration;
 
 use crate::error::{AppError, AppResult};
 use super::model::{
     CreateIssueFields, CreateIssueRequest, IssueTypeRef, ProjectRef,
     JiraAuth, JiraErrorResponse, JiraUser, CreateIssueResponse, JiraProject,
+    JiraIssueContext, JiraIssueResponse,
 };
 use crate::ticket::model::ExternalRef;
 
@@ -111,6 +114,54 @@ impl JiraClient {
         let message = parse_jira_error(&body, status.as_u16());
         Err(AppError::Other(message))
     }
+
+    pub async fn get_issue(&self, issue_key: &str) -> AppResult<JiraIssueContext> {
+        let url = format!(
+            "{}/rest/api/2/issue/{}?fields=summary,status,issuetype,priority,description",
+            self.base_url, issue_key
+        );
+        let response = self
+            .apply_auth(self.client.get(&url))
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let issue: JiraIssueResponse = response.json().await?;
+            let desc = issue.fields.description.unwrap_or_default();
+            let description = if desc.chars().count() > 500 {
+                let truncated: String = desc.chars().take(500).collect();
+                format!("{truncated}...")
+            } else {
+                desc
+            };
+            return Ok(JiraIssueContext {
+                key: issue.key,
+                summary: issue.fields.summary,
+                status: issue.fields.status.name,
+                issue_type: issue.fields.issuetype.name,
+                priority: issue.fields.priority.map(|p| p.name).unwrap_or_else(|| "None".to_string()),
+                description,
+            });
+        }
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        let message = parse_jira_error(&body, status.as_u16());
+        Err(AppError::Other(message))
+    }
+}
+
+pub fn extract_jira_keys(text: &str) -> Vec<String> {
+    let re = Regex::new(r"[A-Z][A-Z0-9]+-\d+").unwrap();
+    let mut seen = HashSet::new();
+    let mut keys = Vec::new();
+    for m in re.find_iter(text) {
+        let key = m.as_str().to_string();
+        if seen.insert(key.clone()) {
+            keys.push(key);
+        }
+    }
+    keys
 }
 
 fn parse_jira_error(body: &str, status: u16) -> String {
@@ -328,6 +379,65 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Authentication failed"), "Expected auth error, got: {err}");
+        mock.assert_async().await;
+    }
+
+    #[test]
+    fn extract_jira_keys_finds_patterns() {
+        let text = "Check FRONT-42 and INFRA-7, also mentioned FRONT-42 again";
+        let keys = extract_jira_keys(text);
+        assert_eq!(keys, vec!["FRONT-42", "INFRA-7"]);
+    }
+
+    #[test]
+    fn extract_jira_keys_empty_for_no_matches() {
+        let keys = extract_jira_keys("no ticket ids here");
+        assert!(keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_issue_success() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/rest/api/2/issue/FRONT-42?fields=summary,status,issuetype,priority,description")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"key":"FRONT-42","fields":{"summary":"Fix login timeout","status":{"name":"In Progress"},"issuetype":{"name":"Bug"},"priority":{"name":"High"},"description":"When users attempt to log in with SSO the request times out"}}"#)
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "test@example.com".to_string(),
+            api_token: "token".to_string(),
+        }).unwrap();
+        let issue = client.get_issue("FRONT-42").await.unwrap();
+
+        assert_eq!(issue.key, "FRONT-42");
+        assert_eq!(issue.summary, "Fix login timeout");
+        assert_eq!(issue.status, "In Progress");
+        assert_eq!(issue.issue_type, "Bug");
+        assert_eq!(issue.priority, "High");
+        assert!(issue.description.contains("SSO"));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn get_issue_not_found() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/rest/api/2/issue/NOPE-1?fields=summary,status,issuetype,priority,description")
+            .with_status(404)
+            .with_body(r#"{"errorMessages":["Issue does not exist"],"errors":{}}"#)
+            .create_async()
+            .await;
+
+        let client = JiraClient::new(&server.url(), JiraAuth::Basic {
+            email: "test@example.com".to_string(),
+            api_token: "token".to_string(),
+        }).unwrap();
+        let result = client.get_issue("NOPE-1").await;
+
+        assert!(result.is_err());
         mock.assert_async().await;
     }
 

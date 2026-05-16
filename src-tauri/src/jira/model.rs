@@ -59,3 +59,33 @@ pub struct JiraProject {
     pub key: String,
     pub name: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JiraIssueContext {
+    pub key: String,
+    pub summary: String,
+    pub status: String,
+    pub issue_type: String,
+    pub priority: String,
+    pub description: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JiraIssueResponse {
+    pub key: String,
+    pub fields: JiraIssueFields,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JiraIssueFields {
+    pub summary: String,
+    pub status: JiraNameField,
+    pub issuetype: JiraNameField,
+    pub priority: Option<JiraNameField>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JiraNameField {
+    pub name: String,
+}
