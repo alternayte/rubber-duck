@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,15 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "board", label: "Board" },
 ];
 
+const MIN_PANEL_WIDTH = 320;
+const DEFAULT_PANEL_WIDTH = 420;
+const MAX_PANEL_WIDTH = 800;
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("dump");
   const [sidePanelOpen, setSidePanelOpen] = useState(true);
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const isResizing = useRef(false);
   const activeSession = useAtomValue(activeSessionAtom);
   const setApiKeySet = useSetAtom(apiKeySetAtom);
   const setSelectedModel = useSetAtom(selectedModelAtom);
@@ -29,6 +35,29 @@ function App() {
     invoke<string | null>("get_setting", { key: "llm.model" }).then((val) => {
       if (val) setSelectedModel(val);
     });
+  }, []);
+
+  const handleMouseDown = useCallback(() => {
+    isResizing.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = window.innerWidth - e.clientX;
+      setPanelWidth(Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
   return (
@@ -91,7 +120,11 @@ function App() {
 
       {/* Side panel (context + chat) */}
       {sidePanelOpen && (
-        <aside className="flex w-80 flex-col border-l border-border bg-card">
+        <aside className="relative flex flex-col border-l border-border bg-card" style={{ width: panelWidth }}>
+          <div
+            onMouseDown={handleMouseDown}
+            className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/50 active:bg-accent z-10"
+          />
           {/* Context section */}
           <div className="border-b border-border p-4">
             <h2 className="text-sm font-medium text-muted-foreground">
