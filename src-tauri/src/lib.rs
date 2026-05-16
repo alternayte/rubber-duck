@@ -78,6 +78,7 @@ pub fn run() {
             get_or_create_note,
             update_note,
             get_conversation,
+            delete_conversation_from,
             get_setting,
             set_setting,
             set_api_key,

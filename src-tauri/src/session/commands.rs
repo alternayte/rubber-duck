@@ -71,6 +71,17 @@ pub fn get_conversation(
 }
 
 #[tauri::command]
+pub fn delete_conversation_from(
+    db: State<Database>,
+    session_id: String,
+    message_id: String,
+) -> Result<usize, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    super::conversation_store::delete_from_message(&conn, &session_id, &message_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn save_pasted_image(
     app: tauri::AppHandle,
     session_id: String,
