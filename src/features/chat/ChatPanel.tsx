@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activeSessionAtom } from "@/features/session/session.atoms";
@@ -37,6 +38,8 @@ export function ChatPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const isExtractingRef = useRef(false);
   const isExtracting = useAtomValue(isExtractingAtom);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
 
   useEffect(() => {
     isExtractingRef.current = isExtracting;
@@ -127,6 +130,35 @@ export function ChatPanel() {
     });
   }
 
+  async function handleEditSubmit() {
+    const text = editingContent.trim();
+    if (!text || !activeSession || isStreaming) return;
+
+    const messageId = editingMessageId;
+    setEditingMessageId(null);
+    setEditingContent("");
+    setErrors([]);
+    setIsStreaming(true);
+    setStreamingContent("");
+    shouldAutoScroll.current = true;
+
+    await invoke("delete_conversation_from", {
+      sessionId: activeSession.id,
+      messageId,
+    });
+
+    const updated = await invoke<ConversationMessage[]>("get_conversation", {
+      sessionId: activeSession.id,
+    });
+    setConversation(updated);
+
+    await invoke("send_message", {
+      sessionId: activeSession.id,
+      content: text,
+      mode: chatMode,
+    });
+  }
+
   if (!activeSession) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-4">
@@ -188,24 +220,84 @@ export function ChatPanel() {
           </p>
         )}
 
-        {conversation.map((msg) => (
-          <div
-            key={msg.id}
-            className={`text-sm ${
-              msg.role === "User"
-                ? "ml-8 rounded-lg bg-accent/50 px-3 py-2"
-                : "mr-4"
-            }`}
-          >
-            {msg.role === "User" ? (
-              <p className="whitespace-pre-wrap">{msg.content}</p>
-            ) : (
-              <div className="prose prose-invert prose-sm max-w-none">
-                <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
-              </div>
-            )}
-          </div>
-        ))}
+        {conversation.map((msg) => {
+          const isEditing = editingMessageId === msg.id;
+          const isFaded = editingMessageId != null && !isEditing &&
+            conversation.findIndex((m) => m.id === editingMessageId) <
+            conversation.findIndex((m) => m.id === msg.id);
+
+          return (
+            <div
+              key={msg.id}
+              className={`text-sm group ${isFaded ? "opacity-40" : ""} ${
+                msg.role === "User"
+                  ? "ml-8 rounded-lg bg-accent/50 px-3 py-2"
+                  : "mr-4"
+              }`}
+            >
+              {msg.role === "User" && isEditing ? (
+                <div className="space-y-2">
+                  <textarea
+                    autoFocus
+                    value={editingContent}
+                    onChange={(e) => setEditingContent(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleEditSubmit();
+                      }
+                      if (e.key === "Escape") {
+                        setEditingMessageId(null);
+                        setEditingContent("");
+                      }
+                    }}
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                    rows={3}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => {
+                        setEditingMessageId(null);
+                        setEditingContent("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="xs"
+                      onClick={handleEditSubmit}
+                      disabled={!editingContent.trim()}
+                    >
+                      Send
+                    </Button>
+                  </div>
+                </div>
+              ) : msg.role === "User" ? (
+                <div className="relative">
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {!isStreaming && !editingMessageId && (
+                    <button
+                      onClick={() => {
+                        setEditingMessageId(msg.id);
+                        setEditingContent(msg.content);
+                      }}
+                      className="absolute -top-1 -right-1 hidden group-hover:block p-0.5 rounded text-muted-foreground hover:text-foreground bg-accent"
+                      title="Edit and re-run"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="prose prose-invert prose-sm max-w-none">
+                  <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {isStreaming && streamingContent && (
           <div className="mr-4 text-sm">
@@ -258,10 +350,10 @@ export function ChatPanel() {
                 ? "Ask the duck to grill your plan..."
                 : "Ask the duck..."
             }
-            disabled={isStreaming}
+            disabled={isStreaming || editingMessageId != null}
             className="flex-1 text-sm"
           />
-          <Button type="submit" size="sm" disabled={isStreaming || !inputValue.trim()}>
+          <Button type="submit" size="sm" disabled={isStreaming || !inputValue.trim() || editingMessageId != null}>
             Send
           </Button>
         </form>
