@@ -5,3 +5,4 @@ export const selectedModelAtom = atom("deepseek/deepseek-chat-v4-0324:free");
 export const settingsOpenAtom = atom(false);
 export const jiraConfiguredAtom = atom(false);
 export const jiraDefaultProjectAtom = atom<string | null>(null);
+export const jiraBaseUrlAtom = atom<string | null>(null);

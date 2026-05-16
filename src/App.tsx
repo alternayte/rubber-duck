@@ -6,7 +6,7 @@ import { SessionSidebar } from "@/features/session/SessionSidebar";
 import { DumpView } from "@/features/session/DumpView";
 import { activeSessionAtom } from "@/features/session/session.atoms";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
-import { apiKeySetAtom, selectedModelAtom } from "@/features/settings/settings.atoms";
+import { apiKeySetAtom, jiraBaseUrlAtom, selectedModelAtom } from "@/features/settings/settings.atoms";
 import { ChatPanel } from "@/features/chat/ChatPanel";
 
 type Tab = "dump" | "refine" | "board";
@@ -29,11 +29,15 @@ function App() {
   const activeSession = useAtomValue(activeSessionAtom);
   const setApiKeySet = useSetAtom(apiKeySetAtom);
   const setSelectedModel = useSetAtom(selectedModelAtom);
+  const setJiraBaseUrl = useSetAtom(jiraBaseUrlAtom);
 
   useEffect(() => {
     invoke<boolean>("has_api_key").then(setApiKeySet);
     invoke<string | null>("get_setting", { key: "llm.model" }).then((val) => {
       if (val) setSelectedModel(val);
+    });
+    invoke<{ base_url: string; auth_method: string; email: string | null } | null>("get_jira_config").then((config) => {
+      if (config) setJiraBaseUrl(config.base_url);
     });
   }, []);
 
