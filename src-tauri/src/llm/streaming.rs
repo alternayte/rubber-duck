@@ -4,6 +4,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use crate::db::Database;
+use crate::jira::client::{extract_jira_keys, JiraClient};
+use crate::jira::model::JiraIssueContext;
 use crate::session::conversation_store;
 use crate::session::store as session_store;
 use crate::session::note_store;
@@ -44,7 +46,7 @@ pub async fn send_message(
         context::ChatMode::Assist
     };
 
-    let (messages, model) = {
+    let (session_context, note_content, tickets, conversation, jira_keys) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
 
         conversation_store::save_message(&conn, &session_id, "User", &content)
@@ -80,12 +82,44 @@ pub async fn send_message(
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
 
+        let mut all_text = note_content.clone();
+        all_text.push(' ');
+        all_text.push_str(&content);
+        let jira_keys = extract_jira_keys(&all_text);
+
+        (session.context, note_content, tickets, conversation, jira_keys)
+    };
+
+    let jira_issues: Vec<JiraIssueContext> = if !jira_keys.is_empty() {
+        match crate::jira::commands::get_jira_credentials(&db) {
+            Ok((base_url, auth)) => match JiraClient::new(&base_url, auth) {
+                Ok(client) => {
+                    let mut issues = Vec::new();
+                    for key in &jira_keys {
+                        match client.get_issue(key).await {
+                            Ok(issue) => issues.push(issue),
+                            Err(e) => tracing::warn!("Failed to fetch Jira issue {key}: {e}"),
+                        }
+                    }
+                    issues
+                }
+                Err(_) => vec![],
+            },
+            Err(_) => vec![],
+        }
+    } else {
+        vec![]
+    };
+
+    let (messages, model) = {
+        let conn = db.conn().map_err(|e| e.to_string())?;
+
         let messages = context::assemble_context(
             &chat_mode,
-            &session.context,
+            &session_context,
             &note_content,
             &tickets,
-            &[],
+            &jira_issues,
             &conversation,
         );
 
