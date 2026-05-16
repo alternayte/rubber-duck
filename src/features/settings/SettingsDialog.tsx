@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ExternalLink } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
@@ -28,19 +30,12 @@ import {
 } from "./settings.atoms";
 import type { JiraProject } from "@/features/ticket/ticket.types";
 
-interface ModelInfo {
-  id: string;
-  name: string;
-  context_window: number;
-}
-
 export function SettingsDialog() {
   const [open, setOpen] = useAtom(settingsOpenAtom);
   const [apiKeySet, setApiKeySet] = useAtom(apiKeySetAtom);
   const [selectedModel, setSelectedModel] = useAtom(selectedModelAtom);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [models, setModels] = useState<ModelInfo[]>([]);
   const [saving, setSaving] = useState(false);
 
   const setJiraConfigured = useSetAtom(jiraConfiguredAtom);
@@ -61,7 +56,6 @@ export function SettingsDialog() {
   useEffect(() => {
     if (open) {
       invoke<boolean>("has_api_key").then(setApiKeySet);
-      invoke<ModelInfo[]>("get_available_models").then(setModels);
       invoke<string | null>("get_setting", { key: "llm.model" }).then(
         (val) => {
           if (val) setSelectedModel(val);
@@ -210,19 +204,22 @@ export function SettingsDialog() {
           </div>
 
           <div className="space-y-2">
-            <Label>Model</Label>
-            <Select value={selectedModel} onValueChange={handleModelChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a model" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1">
+              <Label>Model</Label>
+              <button
+                onClick={() => openUrl("https://openrouter.ai/models")}
+                className="text-muted-foreground hover:text-foreground"
+                title="Browse OpenRouter models"
+              >
+                <ExternalLink className="size-3" />
+              </button>
+            </div>
+            <Input
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              onBlur={() => handleModelChange(selectedModel)}
+              placeholder="e.g. deepseek/deepseek-chat-v4-0324:free"
+            />
           </div>
 
           {/* Jira */}
