@@ -1,3 +1,4 @@
+use crate::jira::model::JiraIssueContext;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +35,7 @@ pub fn assemble_context(
     session_context: &str,
     note_content: &str,
     tickets: &[(String, String, String, String)], // (title, type, priority, description)
+    jira_issues: &[JiraIssueContext],
     conversation: &[(String, String)], // (role, content)
 ) -> Vec<ChatMessage> {
     let base_prompt = match mode {
@@ -62,6 +64,22 @@ pub fn assemble_context(
             ticket_text.push_str(&format!("- {title} ({ticket_type}, {priority}) — {desc_preview}\n"));
         }
         system_parts.push(ticket_text);
+    }
+
+    if !jira_issues.is_empty() {
+        let mut jira_text = String::from("## Referenced Jira Tickets\n");
+        for issue in jira_issues {
+            let desc_preview = if issue.description.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}", issue.description)
+            };
+            jira_text.push_str(&format!(
+                "- {} ({}, {}, {}): {}{}\n",
+                issue.key, issue.issue_type, issue.status, issue.priority, issue.summary, desc_preview
+            ));
+        }
+        system_parts.push(jira_text);
     }
 
     let mut messages = vec![ChatMessage {
@@ -96,7 +114,7 @@ mod tests {
 
     #[test]
     fn system_message_includes_prompt() {
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[]);
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, "system");
         assert!(messages[0].content.contains("rubber-duck"));
@@ -104,13 +122,13 @@ mod tests {
 
     #[test]
     fn includes_session_context() {
-        let messages = assemble_context(&ChatMode::Assist, "We are migrating the auth service", "", &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "We are migrating the auth service", "", &[], &[], &[]);
         assert!(messages[0].content.contains("migrating the auth service"));
     }
 
     #[test]
     fn includes_note_content() {
-        let messages = assemble_context(&ChatMode::Assist, "", "# My brainstorm\nSome ideas here", &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "# My brainstorm\nSome ideas here", &[], &[], &[]);
         assert!(messages[0].content.contains("My brainstorm"));
     }
 
@@ -119,7 +137,7 @@ mod tests {
         let tickets = vec![
             ("Fix login".to_string(), "Task".to_string(), "High".to_string(), "Auth is broken".to_string()),
         ];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[], &[]);
         assert!(messages[0].content.contains("Fix login"));
         assert!(messages[0].content.contains("Task"));
     }
@@ -130,7 +148,7 @@ mod tests {
             ("User".to_string(), "Break this into tickets".to_string()),
             ("Assistant".to_string(), "Here are 3 tickets...".to_string()),
         ];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &conversation);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &conversation);
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].role, "user");
         assert_eq!(messages[2].role, "assistant");
@@ -144,14 +162,14 @@ mod tests {
                 (role.to_string(), format!("Message {i}"))
             })
             .collect();
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &conversation);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &conversation);
         assert_eq!(messages.len(), 41); // system + 40 conversation
         assert!(messages[1].content.contains("Message 20")); // keeps LAST 40
     }
 
     #[test]
     fn grill_mode_uses_different_prompt() {
-        let messages = assemble_context(&ChatMode::Grill, "", "", &[], &[]);
+        let messages = assemble_context(&ChatMode::Grill, "", "", &[], &[], &[]);
         assert_eq!(messages.len(), 1);
         assert!(messages[0].content.contains("critical technical reviewer"));
         assert!(!messages[0].content.contains("rubber-duck"));
@@ -168,8 +186,33 @@ mod tests {
             "High".to_string(),
             description,
         )];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[], &[]);
         assert!(messages[0].content.contains("Test"));
         assert!(messages[0].content.contains("..."));
+    }
+
+    #[test]
+    fn includes_jira_issues_in_context() {
+        let jira_issues = vec![
+            JiraIssueContext {
+                key: "FRONT-42".to_string(),
+                summary: "Fix login timeout".to_string(),
+                status: "In Progress".to_string(),
+                issue_type: "Bug".to_string(),
+                priority: "High".to_string(),
+                description: "SSO times out after 30s".to_string(),
+            },
+        ];
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &jira_issues, &[]);
+        assert!(messages[0].content.contains("Referenced Jira Tickets"));
+        assert!(messages[0].content.contains("FRONT-42"));
+        assert!(messages[0].content.contains("Fix login timeout"));
+        assert!(messages[0].content.contains("SSO times out"));
+    }
+
+    #[test]
+    fn empty_jira_issues_omits_section() {
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[]);
+        assert!(!messages[0].content.contains("Referenced Jira Tickets"));
     }
 }

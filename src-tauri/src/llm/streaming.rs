@@ -85,6 +85,7 @@ pub async fn send_message(
             &session.context,
             &note_content,
             &tickets,
+            &[],
             &conversation,
         );
 
