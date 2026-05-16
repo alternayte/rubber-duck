@@ -6,7 +6,7 @@ use crate::error::AppError;
 use crate::settings::store as settings_store;
 
 use super::client::JiraClient;
-use super::model::{JiraAuth, JiraUser, JiraProject};
+use super::model::{JiraAuth, JiraUser, JiraProject, JiraIssueContext};
 
 const KEYRING_SERVICE: &str = "rubber-duck";
 const JIRA_KEYRING_USER: &str = "jira-api-token";
@@ -18,7 +18,7 @@ pub struct JiraConfig {
     pub email: Option<String>, // Only needed for basic auth
 }
 
-fn get_jira_credentials(db: &Database) -> Result<(String, JiraAuth), String> {
+pub(crate) fn get_jira_credentials(db: &Database) -> Result<(String, JiraAuth), String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let base_url = settings_store::get(&conn, "jira.base_url")
         .map_err(|e| e.to_string())?
@@ -153,4 +153,29 @@ pub async fn get_jira_projects(db: State<'_, Database>) -> Result<Vec<JiraProjec
     let (base_url, auth) = get_jira_credentials(&db)?;
     let client = JiraClient::new(&base_url, auth).map_err(|e| e.to_string())?;
     client.get_projects().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn fetch_jira_issues(
+    db: State<'_, Database>,
+    keys: Vec<String>,
+) -> Result<Vec<JiraIssueContext>, String> {
+    let credentials = get_jira_credentials(&db);
+    let (base_url, auth) = match credentials {
+        Ok(c) => c,
+        Err(_) => return Ok(vec![]),
+    };
+    let client = match JiraClient::new(&base_url, auth) {
+        Ok(c) => c,
+        Err(_) => return Ok(vec![]),
+    };
+
+    let mut results = Vec::new();
+    for key in &keys {
+        match client.get_issue(key).await {
+            Ok(issue) => results.push(issue),
+            Err(e) => tracing::warn!("Failed to fetch Jira issue {key}: {e}"),
+        }
+    }
+    Ok(results)
 }
