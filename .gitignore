@@ -44,7 +44,7 @@ target/
 # ---------------------
 src-tauri/target/
 src-tauri/gen/
-src-tauri/icons/
+# src-tauri/icons/ — tracked (needed for Tauri build)
 *.app
 *.dmg
 *.deb
