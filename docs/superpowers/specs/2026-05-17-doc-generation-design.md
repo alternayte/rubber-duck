@@ -239,6 +239,62 @@ Separate namespace from chat events:
 
 Section ID in each event allows the frontend to route content to the correct section.
 
+## Version History
+
+### Data Model
+
+```sql
+CREATE TABLE document_section_versions (
+    id TEXT PRIMARY KEY,
+    section_id TEXT NOT NULL REFERENCES document_sections(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+### Behavior
+
+- Before a section's content is overwritten (regeneration or manual edit save), the current content is saved as a version
+- Empty content (initial state before first generation) is not saved as a version
+- Versions are ordered by `created_at DESC` (newest first)
+
+### Store Functions
+
+- `save_version(conn, section_id, content) -> AppResult<()>`
+- `list_versions(conn, section_id) -> AppResult<Vec<SectionVersion>>`
+- `get_version(conn, version_id) -> AppResult<SectionVersion>`
+
+`SectionVersion`: `{ id, section_id, content, created_at }`
+
+### Tauri Commands
+
+| Command | Params | Returns |
+|---------|--------|---------|
+| `list_section_versions` | `section_id` | `Vec<SectionVersion>` |
+| `restore_section_version` | `section_id, version_id` | `DocumentSection` |
+
+`restore_section_version`: saves current content as a new version, then sets section content to the restored version's content.
+
+### Frontend
+
+Per-section: a [⏱] history button alongside [↻] and [✏]:
+
+```
+📋 Overview                      [⏱] [↻] [✏]
+```
+
+Clicking [⏱] opens a dropdown/popover listing previous versions with timestamps:
+
+```
+┌─ Version History ─────────────────────┐
+│  May 17, 2026 2:30 PM    [Restore]   │
+│  May 17, 2026 1:15 PM    [Restore]   │
+│  May 17, 2026 12:00 PM   [Restore]   │
+└───────────────────────────────────────┘
+```
+
+Clicking a version row shows a preview of that version's content. "Restore" replaces the current section content (saving the current as a new version first).
+
 ## New Module Structure
 
 ```
@@ -266,7 +322,6 @@ Loaded via `include_str!` — bundled into the binary.
 
 ## Out of Scope
 
-- Version history (showing previous generations of a section)
 - Collaborative editing
 - PDF export
 - Template marketplace / sharing
