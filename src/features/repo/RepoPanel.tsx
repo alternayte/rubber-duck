@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { useAtom } from "jotai";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activeSessionAtom } from "@/features/session/session.atoms";
-import { reposAtom } from "./repo.atoms";
+import { reposAtom, indexStatusAtom, type IndexProgress } from "./repo.atoms";
 import { useRepoActions } from "./useRepoActions";
 import { FileTree } from "./FileTree";
-import { Plus, FolderOpen, GitBranch, X, Loader2 } from "lucide-react";
+import { Plus, FolderOpen, GitBranch, X, Loader2, RefreshCw, Check } from "lucide-react";
 
 export function RepoPanel() {
   const [activeSession] = useAtom(activeSessionAtom);
   const [repos] = useAtom(reposAtom);
-  const { loadRepos, attachRepo, detachRepo } = useRepoActions();
+  const [indexStatus, setIndexStatus] = useAtom(indexStatusAtom);
+  const { loadRepos, attachRepo, detachRepo, reindexRepo } = useRepoActions();
   const [showAttach, setShowAttach] = useState(false);
   const [gitUrl, setGitUrl] = useState("");
   const [attaching, setAttaching] = useState(false);
@@ -23,6 +25,54 @@ export function RepoPanel() {
       loadRepos(activeSession.id);
     }
   }, [activeSession?.id]);
+
+  useEffect(() => {
+    const unlisteners: (() => void)[] = [];
+
+    listen<IndexProgress>("index:progress", (event) => {
+      const { repo_id, files_done, files_total } = event.payload;
+      const progress = Math.round((files_done / files_total) * 100);
+      setIndexStatus((prev) => ({
+        ...prev,
+        [repo_id]: { indexing: true, progress },
+      }));
+    }).then((unlisten) => unlisteners.push(unlisten));
+
+    listen<{ repo_id: string }>("index:done", (_event) => {
+      if (activeSession) {
+        loadRepos(activeSession.id);
+      }
+    }).then((unlisten) => unlisteners.push(unlisten));
+
+    return () => {
+      unlisteners.forEach((fn) => fn());
+    };
+  }, [activeSession?.id]);
+
+  function renderIndexBadge(repoId: string) {
+    const status = indexStatus[repoId];
+    if (!status) return null;
+
+    if ("indexing" in status && status.indexing) {
+      return (
+        <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+          <Loader2 className="size-2.5 animate-spin" />
+          {status.progress}%
+        </span>
+      );
+    }
+
+    if ("indexed" in status && status.indexed) {
+      return (
+        <span className="flex items-center gap-0.5 text-[10px] text-green-400">
+          <Check className="size-2.5" />
+          Indexed
+        </span>
+      );
+    }
+
+    return null;
+  }
 
   async function handleAttachLocal() {
     if (!activeSession) return;
@@ -130,6 +180,14 @@ export function RepoPanel() {
               <FolderOpen className="size-3 text-muted-foreground" />
             )}
             <span className="text-muted-foreground flex-1 truncate">{repo.name}</span>
+            {renderIndexBadge(repo.id)}
+            <button
+              onClick={() => reindexRepo(repo.id)}
+              className="text-muted-foreground/50 hover:text-blue-400"
+              title="Re-index"
+            >
+              <RefreshCw className="size-3" />
+            </button>
             <button
               onClick={() => detachRepo(repo.id, activeSession.id)}
               className="text-muted-foreground/50 hover:text-red-400"
