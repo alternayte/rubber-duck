@@ -1,8 +1,19 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 
 use rusqlite::Connection;
 
 use crate::error::{AppError, AppResult};
+
+static SQLITE_VEC_INIT: Once = Once::new();
+
+fn ensure_sqlite_vec_loaded() {
+    SQLITE_VEC_INIT.call_once(|| unsafe {
+        let rc = rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            sqlite_vec::sqlite3_vec_init as *const (),
+        )));
+        assert_eq!(rc, rusqlite::ffi::SQLITE_OK);
+    });
+}
 
 struct Migration {
     name: &'static str,
@@ -30,6 +41,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "005_add_docs",
         sql: include_str!("../migrations/005_add_docs.sql"),
     },
+    Migration {
+        name: "006_add_rag",
+        sql: include_str!("../migrations/006_add_rag.sql"),
+    },
 ];
 
 pub struct Database {
@@ -38,12 +53,14 @@ pub struct Database {
 
 impl Database {
     pub fn open(path: &str) -> AppResult<Self> {
+        ensure_sqlite_vec_loaded();
         let conn = Connection::open(path)?;
         Self::init(conn)
     }
 
     #[cfg(test)]
     pub fn open_in_memory() -> AppResult<Self> {
+        ensure_sqlite_vec_loaded();
         let conn = Connection::open_in_memory()?;
         Self::init(conn)
     }
@@ -111,7 +128,7 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM _migrations", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
     }
 
     #[test]
@@ -125,7 +142,7 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM _migrations", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
     }
 
     #[test]
