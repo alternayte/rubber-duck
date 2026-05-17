@@ -22,6 +22,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "003_add_settings",
         sql: include_str!("../migrations/003_add_settings.sql"),
     },
+    Migration {
+        name: "004_add_repos",
+        sql: include_str!("../migrations/004_add_repos.sql"),
+    },
 ];
 
 pub struct Database {
@@ -103,7 +107,7 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM _migrations", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
     }
 
     #[test]
@@ -117,7 +121,7 @@ mod tests {
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM _migrations", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
     }
 
     #[test]

@@ -4,6 +4,7 @@ mod llm;
 mod session;
 mod settings;
 mod jira;
+mod repo_context;
 mod ticket;
 
 use tauri::Manager;
