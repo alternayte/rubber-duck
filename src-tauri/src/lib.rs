@@ -1,4 +1,5 @@
 mod db;
+mod docs;
 mod error;
 mod llm;
 mod session;
