@@ -36,7 +36,19 @@ pub async fn attach_repo(
     };
 
     let conn = db.conn().map_err(|e| e.to_string())?;
-    store::attach(&conn, &session_id, &name, &source, &local_path).map_err(|e| e.to_string())
+    let repo = store::attach(&conn, &session_id, &name, &source, &local_path)
+        .map_err(|e| e.to_string())?;
+
+    // Trigger background indexing for RAG
+    let app_clone = app.clone();
+    let repo_id = repo.id.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::rag::indexer::run(&app_clone, &repo_id).await {
+            tracing::warn!("Auto-indexing failed for {repo_id}: {e}");
+        }
+    });
+
+    Ok(repo)
 }
 
 #[tauri::command]
