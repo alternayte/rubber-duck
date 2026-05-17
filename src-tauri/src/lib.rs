@@ -11,6 +11,7 @@ mod ticket;
 use tauri::Manager;
 
 use db::Database;
+use docs::commands::*;
 use session::commands::*;
 use settings::commands::*;
 use ticket::commands::*;
@@ -111,6 +112,21 @@ pub fn run() {
             get_repo_tree,
             read_repo_file,
             search_repo_files,
+            list_builtin_templates,
+            create_custom_template,
+            list_custom_templates,
+            get_custom_template,
+            update_custom_template,
+            delete_custom_template,
+            create_doc,
+            get_doc,
+            list_docs,
+            delete_doc,
+            list_document_sections,
+            update_document_section,
+            generate_doc_section,
+            list_section_versions,
+            restore_section_version,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
