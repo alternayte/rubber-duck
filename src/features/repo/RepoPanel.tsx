@@ -27,25 +27,25 @@ export function RepoPanel() {
   }, [activeSession?.id]);
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
+    const promises = [
+      listen<IndexProgress>("index:progress", (event) => {
+        const { repo_id, files_done, files_total } = event.payload;
+        const progress = Math.round((files_done / files_total) * 100);
+        setIndexStatus((prev) => ({
+          ...prev,
+          [repo_id]: { indexing: true, progress },
+        }));
+      }),
 
-    listen<IndexProgress>("index:progress", (event) => {
-      const { repo_id, files_done, files_total } = event.payload;
-      const progress = Math.round((files_done / files_total) * 100);
-      setIndexStatus((prev) => ({
-        ...prev,
-        [repo_id]: { indexing: true, progress },
-      }));
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    listen<{ repo_id: string }>("index:done", (_event) => {
-      if (activeSession) {
-        loadRepos(activeSession.id);
-      }
-    }).then((unlisten) => unlisteners.push(unlisten));
+      listen<{ repo_id: string }>("index:done", (_event) => {
+        if (activeSession) {
+          loadRepos(activeSession.id);
+        }
+      }),
+    ];
 
     return () => {
-      unlisteners.forEach((fn) => fn());
+      promises.forEach((p) => p.then((unlisten) => unlisten()));
     };
   }, [activeSession?.id]);
 

@@ -17,49 +17,49 @@ export function useDocActions(sessionId: string | undefined) {
   const [sectionGeneration, setSectionGeneration] = useAtom(sectionGenerationAtom);
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
+    const promises = [
+      listen<{ section_id: string; content: string }>("doc:chunk", (event) => {
+        const { section_id, content } = event.payload;
+        setSectionGeneration((prev) => {
+          const current = prev[section_id];
+          const accumulated =
+            current?.status === "generating" ? current.accumulated + content : content;
+          return { ...prev, [section_id]: { status: "generating" as const, accumulated } };
+        });
+      }),
 
-    listen<{ section_id: string; content: string }>("doc:chunk", (event) => {
-      const { section_id, content } = event.payload;
-      setSectionGeneration((prev) => {
-        const current = prev[section_id];
-        const accumulated =
-          current?.status === "generating" ? current.accumulated + content : content;
-        return { ...prev, [section_id]: { status: "generating" as const, accumulated } };
-      });
-    }).then((u) => unlisteners.push(u));
-
-    listen<{ section_id: string; full_content: string }>("doc:done", (event) => {
-      const { section_id } = event.payload;
-      setSectionGeneration((prev) => {
-        const next = { ...prev };
-        delete next[section_id];
-        return next;
-      });
-      setSectionsByDoc((prev) => {
-        for (const [docId, sections] of Object.entries(prev)) {
-          if (sections.some((s) => s.id === section_id)) {
-            invoke<DocumentSection[]>("list_document_sections", { documentId: docId }).then(
-              (updated) => {
-                setSectionsByDoc((p) => ({ ...p, [docId]: updated }));
-              },
-            );
-            break;
+      listen<{ section_id: string; full_content: string }>("doc:done", (event) => {
+        const { section_id } = event.payload;
+        setSectionGeneration((prev) => {
+          const next = { ...prev };
+          delete next[section_id];
+          return next;
+        });
+        setSectionsByDoc((prev) => {
+          for (const [docId, sections] of Object.entries(prev)) {
+            if (sections.some((s) => s.id === section_id)) {
+              invoke<DocumentSection[]>("list_document_sections", { documentId: docId }).then(
+                (updated) => {
+                  setSectionsByDoc((p) => ({ ...p, [docId]: updated }));
+                },
+              );
+              break;
+            }
           }
-        }
-        return prev;
-      });
-    }).then((u) => unlisteners.push(u));
+          return prev;
+        });
+      }),
 
-    listen<{ section_id: string; message: string }>("doc:error", (event) => {
-      const { section_id, message } = event.payload;
-      setSectionGeneration((prev) => ({
-        ...prev,
-        [section_id]: { status: "error" as const, message },
-      }));
-    }).then((u) => unlisteners.push(u));
+      listen<{ section_id: string; message: string }>("doc:error", (event) => {
+        const { section_id, message } = event.payload;
+        setSectionGeneration((prev) => ({
+          ...prev,
+          [section_id]: { status: "error" as const, message },
+        }));
+      }),
+    ];
 
-    return () => unlisteners.forEach((fn) => fn());
+    return () => promises.forEach((p) => p.then((unlisten) => unlisten()));
   }, []);
 
   async function loadDocuments() {

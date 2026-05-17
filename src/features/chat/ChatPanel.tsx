@@ -101,51 +101,51 @@ export function ChatPanel() {
   }, [activeSession?.id]);
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
+    const promises = [
+      listen<{ content: string }>("llm:chunk", (event) => {
+        setStreamingContent((prev) => prev + event.payload.content);
+      }),
 
-    listen<{ content: string }>("llm:chunk", (event) => {
-      setStreamingContent((prev) => prev + event.payload.content);
-    }).then((unlisten) => unlisteners.push(unlisten));
+      listen<{ file_count: number; repo_count: number }>("rag:context", (event) => {
+        setRagContext({
+          fileCount: event.payload.file_count,
+          repoCount: event.payload.repo_count,
+        });
+      }),
 
-    listen<{ file_count: number; repo_count: number }>("rag:context", (event) => {
-      setRagContext({
-        fileCount: event.payload.file_count,
-        repoCount: event.payload.repo_count,
-      });
-    }).then((unlisten) => unlisteners.push(unlisten));
+      listen<{ full_content: string }>("llm:done", () => {
+        if (isExtractingRef.current) return;
+        setIsStreaming(false);
+        setStreamingContent("");
+        setRagContext(null);
+        if (activeSession) {
+          invoke<ConversationMessage[]>("get_conversation", {
+            sessionId: activeSession.id,
+          }).then(setConversation);
+        }
+      }),
 
-    listen<{ full_content: string }>("llm:done", () => {
-      if (isExtractingRef.current) return;
-      setIsStreaming(false);
-      setStreamingContent("");
-      setRagContext(null);
-      if (activeSession) {
-        invoke<ConversationMessage[]>("get_conversation", {
-          sessionId: activeSession.id,
-        }).then(setConversation);
-      }
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    listen<{ message: string }>("llm:error", (event) => {
-      setIsStreaming(false);
-      setStreamingContent("");
-      const msg = event.payload.message;
-      let displayMsg = msg;
-      if (msg.includes("Keyring") || msg.includes("401")) {
-        displayMsg = "Invalid API key — check Settings";
-      } else if (msg.includes("429")) {
-        displayMsg = "Rate limited — try again in a moment";
-      } else if (msg.includes("connect") || msg.includes("network") || msg.includes("dns")) {
-        displayMsg = "Connection failed — check your internet";
-      }
-      setErrors((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), message: displayMsg },
-      ]);
-    }).then((unlisten) => unlisteners.push(unlisten));
+      listen<{ message: string }>("llm:error", (event) => {
+        setIsStreaming(false);
+        setStreamingContent("");
+        const msg = event.payload.message;
+        let displayMsg = msg;
+        if (msg.includes("Keyring") || msg.includes("401")) {
+          displayMsg = "Invalid API key — check Settings";
+        } else if (msg.includes("429")) {
+          displayMsg = "Rate limited — try again in a moment";
+        } else if (msg.includes("connect") || msg.includes("network") || msg.includes("dns")) {
+          displayMsg = "Connection failed — check your internet";
+        }
+        setErrors((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), message: displayMsg },
+        ]);
+      }),
+    ];
 
     return () => {
-      unlisteners.forEach((fn) => fn());
+      promises.forEach((p) => p.then((unlisten) => unlisten()));
     };
   }, [activeSession?.id]);
 
