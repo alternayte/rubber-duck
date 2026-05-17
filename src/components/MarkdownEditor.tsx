@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -6,12 +6,16 @@ import { languages } from "@codemirror/language-data";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { bracketMatching } from "@codemirror/language";
+import { autocompletion, CompletionContext } from "@codemirror/autocomplete";
+import { invoke } from "@tauri-apps/api/core";
+import type { FileSearchResult } from "@/features/repo/repo.types";
 
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   onImagePaste?: (base64: string) => Promise<string | null>;
+  sessionId?: string;
 }
 
 export function MarkdownEditor({
@@ -19,6 +23,7 @@ export function MarkdownEditor({
   onChange,
   placeholder = "Start typing...",
   onImagePaste,
+  sessionId,
 }: MarkdownEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -26,6 +31,30 @@ export function MarkdownEditor({
   onChangeRef.current = onChange;
   const onImagePasteRef = useRef(onImagePaste);
   onImagePasteRef.current = onImagePaste;
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
+  const mentionCompletion = useCallback(async (context: CompletionContext) => {
+    const before = context.matchBefore(/@[\w.\-/]*/);
+    if (!before || before.from === before.to - 1) return null;
+    if (!sessionIdRef.current) return null;
+
+    const query = before.text.slice(1);
+    if (query.length < 1) return null;
+
+    const results = await invoke<FileSearchResult[]>("search_repo_files", {
+      sessionId: sessionIdRef.current,
+      query,
+    });
+
+    return {
+      from: before.from,
+      options: results.map((r) => ({
+        label: `@${r.display}`,
+        apply: `@${r.display}`,
+      })),
+    };
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -35,6 +64,10 @@ export function MarkdownEditor({
       extensions: [
         history(),
         bracketMatching(),
+        autocompletion({
+          override: [mentionCompletion],
+          activateOnTyping: true,
+        }),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         oneDark,
         EditorView.lineWrapping,

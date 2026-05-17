@@ -210,6 +210,7 @@ Only extract tickets that are clearly implied by the notes. Don't invent work th
             onChange={handleChange}
             onImagePaste={handleImagePaste}
             placeholder="Brain dump here... markdown supported"
+            sessionId={sessionId}
           />
         ) : (
           <div className="prose prose-invert prose-sm max-w-none overflow-auto h-full">
