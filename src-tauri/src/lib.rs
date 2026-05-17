@@ -18,6 +18,7 @@ use settings::commands::*;
 use ticket::commands::*;
 use jira::commands::*;
 use repo_context::commands::*;
+use rag::commands::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -129,6 +130,9 @@ pub fn run() {
             generate_doc_section,
             list_section_versions,
             restore_section_version,
+            index_repo,
+            get_index_status,
+            reindex_repo,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
@@ -136,6 +140,9 @@ pub fn run() {
             let db_path = app_dir.join("rubber-duck.db");
             let db = Database::open(db_path.to_str().expect("invalid db path"))?;
             app.manage(db);
+            let models_dir = app_dir.join("models");
+            std::fs::create_dir_all(&models_dir)?;
+            app.manage(rag::embedder::Embedder::new(models_dir));
             Ok(())
         })
         .run(tauri::generate_context!())
