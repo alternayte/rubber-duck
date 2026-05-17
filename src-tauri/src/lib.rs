@@ -14,11 +14,13 @@ use session::commands::*;
 use settings::commands::*;
 use ticket::commands::*;
 use jira::commands::*;
+use repo_context::commands::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol("rdimg", |ctx, request| {
             let make_response = |status: u16, body: Vec<u8>, content_type: &str| {
                 tauri::http::Response::builder()
@@ -102,6 +104,12 @@ pub fn run() {
             push_ticket_to_jira,
             get_jira_projects,
             fetch_jira_issues,
+            attach_repo,
+            detach_repo,
+            list_repos,
+            get_repo_tree,
+            read_repo_file,
+            search_repo_files,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
