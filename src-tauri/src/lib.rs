@@ -7,6 +7,7 @@ mod settings;
 mod jira;
 mod repo_context;
 mod ticket;
+mod rag;
 
 use tauri::Manager;
 
