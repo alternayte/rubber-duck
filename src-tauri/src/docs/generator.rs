@@ -34,11 +34,17 @@ struct DocErrorPayload {
     message: String,
 }
 
-const DOC_SYSTEM_PROMPT: &str = "You are generating a section of a technical document. \
-Write in clear, professional prose. Use markdown formatting where appropriate (headings, \
-lists, code blocks). Be specific and grounded in the session context provided — do not \
-pad with generic content. Write only the content for this section; do not include the \
-section heading or any preamble.";
+const DOC_SYSTEM_PROMPT: &str = "You are generating a section of a technical document \
+for a team that uses agentic development practices (AI coding agents implement tickets, \
+automated verification is the norm, human review focuses on architecture and business logic). \
+\n\nWrite in clear, professional prose. Use markdown formatting (headings, lists, code blocks). \
+Be specific and grounded in the session context — do not pad with generic boilerplate. \
+\n\nKey principles for this era:\n\
+- Specifications should be precise enough for an AI agent to implement without ambiguity.\n\
+- Distinguish automated verification (tests, linting, type checks) from human judgment (UX, business logic, architecture).\n\
+- Don't prescribe manual processes for things agents can automate (code review, test generation, security scanning).\n\
+- Focus on WHAT and WHY. The HOW is increasingly delegated to agents.\n\
+\nWrite only the content for this section; do not include the section heading or any preamble.";
 
 pub async fn generate_section(
     app: AppHandle,

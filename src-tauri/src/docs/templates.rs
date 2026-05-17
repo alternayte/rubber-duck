@@ -185,33 +185,33 @@ mod tests {
     }
 
     #[test]
-    fn prd_has_five_sections() {
+    fn prd_has_six_sections() {
         let sections = parse_template(PRD_TEMPLATE);
-        assert_eq!(sections.len(), 5);
-        assert_eq!(sections[0].name, "Overview");
-        assert_eq!(sections[4].name, "Success Criteria");
-    }
-
-    #[test]
-    fn sdd_has_six_sections() {
-        let sections = parse_template(SDD_TEMPLATE);
         assert_eq!(sections.len(), 6);
         assert_eq!(sections[0].name, "Overview");
-        assert_eq!(sections[5].name, "Error Handling");
+        assert_eq!(sections[5].name, "Scope Boundaries");
     }
 
     #[test]
-    fn test_plan_has_five_sections() {
-        let sections = parse_template(TEST_PLAN_TEMPLATE);
-        assert_eq!(sections.len(), 5);
+    fn sdd_has_seven_sections() {
+        let sections = parse_template(SDD_TEMPLATE);
+        assert_eq!(sections.len(), 7);
         assert_eq!(sections[0].name, "Overview");
-        assert_eq!(sections[4].name, "Acceptance Criteria");
+        assert_eq!(sections[6].name, "Implementation Notes");
     }
 
     #[test]
-    fn adr_has_four_sections() {
+    fn test_plan_has_six_sections() {
+        let sections = parse_template(TEST_PLAN_TEMPLATE);
+        assert_eq!(sections.len(), 6);
+        assert_eq!(sections[0].name, "Overview");
+        assert_eq!(sections[5].name, "Release Verification Checklist");
+    }
+
+    #[test]
+    fn adr_has_five_sections() {
         let sections = parse_template(ADR_TEMPLATE);
-        assert_eq!(sections.len(), 4);
+        assert_eq!(sections.len(), 5);
         assert_eq!(sections[0].name, "Context");
         assert_eq!(sections[3].name, "Alternatives Considered");
     }

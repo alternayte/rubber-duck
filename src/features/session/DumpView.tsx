@@ -163,17 +163,21 @@ export function DumpView({ sessionId }: DumpViewProps) {
       unlistenError();
     });
 
-    const extractPrompt = `Read my brain dump notes carefully and extract structured work tickets from them.
+    const extractPrompt = `Read my brain dump notes carefully and extract structured kanban work tickets from them.
 
 Return the tickets as a JSON array inside a \`\`\`json code block. Each ticket object should have these fields:
-- "title": short descriptive title (required)
-- "description": detailed description of the work
-- "acceptance_criteria": what "done" looks like
+- "title": concise action-oriented title starting with a verb (e.g. "Add auth retry logic", "Fix SSO timeout") (required)
+- "description": structured description using this format:
+  **Context:** Why this work exists — the problem or need (1-2 sentences).
+  **Scope:** What specifically to build or change. Reference files, APIs, or components if known from the notes.
+  **Approach:** How to implement it (high-level technical approach, not step-by-step). If an AI coding agent will implement this, write it so the agent has enough context to start without asking clarifying questions.
+  **Out of Scope:** What this ticket explicitly does NOT cover (prevents scope creep).
+- "acceptance_criteria": verifiable checklist. Each item should be objectively testable — either by a human or an automated check. Prefix agent-verifiable items with "[auto]" (e.g. "[auto] All existing tests pass", "[auto] No TypeScript errors"). Prefix human-verified items with "[human]" (e.g. "[human] UX feels responsive on slow connections").
 - "priority": one of "Low", "Medium", "High", "Critical"
 - "ticket_type": one of "Task", "Bug", "Story", "Epic"
 - "estimate": one of "XS", "S", "M", "L", "XL"
 
-Only extract tickets that are clearly implied by the notes. Don't invent work that isn't there.`;
+Only extract tickets that are clearly implied by the notes. Don't invent work that isn't there. Write tickets assuming they may be picked up by an AI coding agent — provide enough context and specificity that implementation can begin without ambiguity.`;
 
     await invoke("send_message", {
       sessionId,
