@@ -8,6 +8,7 @@ import { activeSessionAtom } from "@/features/session/session.atoms";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { apiKeySetAtom, jiraBaseUrlAtom, selectedModelAtom } from "@/features/settings/settings.atoms";
 import { ChatPanel } from "@/features/chat/ChatPanel";
+import { RepoPanel } from "@/features/repo/RepoPanel";
 
 type Tab = "dump" | "refine" | "board";
 
@@ -129,15 +130,7 @@ function App() {
             onMouseDown={handleMouseDown}
             className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/50 active:bg-accent z-10"
           />
-          {/* Context section */}
-          <div className="border-b border-border p-4">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Context
-            </h2>
-            <p className="mt-2 text-xs text-muted-foreground/60">
-              No repos or files attached
-            </p>
-          </div>
+          <RepoPanel />
 
           <ChatPanel />
         </aside>
