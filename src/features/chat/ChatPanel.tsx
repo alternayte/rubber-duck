@@ -14,6 +14,7 @@ import {
   conversationAtom,
   isExtractingAtom,
   isStreamingAtom,
+  ragContextAtom,
   streamingContentAtom,
 } from "./chat.atoms";
 import type { ConversationMessage } from "./chat.types";
@@ -61,6 +62,7 @@ export function ChatPanel() {
   const [conversation, setConversation] = useAtom(conversationAtom);
   const [isStreaming, setIsStreaming] = useAtom(isStreamingAtom);
   const [streamingContent, setStreamingContent] = useAtom(streamingContentAtom);
+  const [ragContext, setRagContext] = useAtom(ragContextAtom);
   const [errors, setErrors] = useState<ErrorMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -105,10 +107,18 @@ export function ChatPanel() {
       setStreamingContent((prev) => prev + event.payload.content);
     }).then((unlisten) => unlisteners.push(unlisten));
 
+    listen<{ file_count: number; repo_count: number }>("rag:context", (event) => {
+      setRagContext({
+        fileCount: event.payload.file_count,
+        repoCount: event.payload.repo_count,
+      });
+    }).then((unlisten) => unlisteners.push(unlisten));
+
     listen<{ full_content: string }>("llm:done", () => {
       if (isExtractingRef.current) return;
       setIsStreaming(false);
       setStreamingContent("");
+      setRagContext(null);
       if (activeSession) {
         invoke<ConversationMessage[]>("get_conversation", {
           sessionId: activeSession.id,
@@ -151,6 +161,7 @@ export function ChatPanel() {
     setErrors([]);
     setIsStreaming(true);
     setStreamingContent("");
+    setRagContext(null);
     shouldAutoScroll.current = true;
 
     await invoke("send_message", {
@@ -170,6 +181,7 @@ export function ChatPanel() {
     setErrors([]);
     setIsStreaming(true);
     setStreamingContent("");
+    setRagContext(null);
     shouldAutoScroll.current = true;
 
     await invoke("delete_conversation_from", {
@@ -334,6 +346,13 @@ export function ChatPanel() {
             </div>
           );
         })}
+
+        {isStreaming && ragContext && (
+          <div className="mr-4 text-[11px] text-muted-foreground/70 py-1">
+            Drawing from {ragContext.fileCount} file{ragContext.fileCount !== 1 ? "s" : ""} across{" "}
+            {ragContext.repoCount} repo{ragContext.repoCount !== 1 ? "s" : ""}
+          </div>
+        )}
 
         {isStreaming && streamingContent && (
           <div className="mr-4 text-sm">

@@ -6,3 +6,4 @@ export const isStreamingAtom = atom(false);
 export const streamingContentAtom = atom("");
 export const conversationAtom = atom<ConversationMessage[]>([]);
 export const isExtractingAtom = atom(false);
+export const ragContextAtom = atom<{ fileCount: number; repoCount: number } | null>(null);
