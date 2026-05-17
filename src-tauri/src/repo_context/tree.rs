@@ -132,6 +132,71 @@ pub fn read_file(repo_path: &Path, relative_path: &str) -> AppResult<String> {
         .map_err(|_| AppError::Other(format!("File '{relative_path}' is not valid UTF-8")))
 }
 
+/// Read all files in a directory, concatenated with file path headers.
+/// Respects .gitignore, skips binary files, caps total output at `max_chars`.
+pub fn read_directory(repo_path: &Path, relative_dir: &str, max_chars: usize) -> AppResult<String> {
+    let canonical_root = repo_path
+        .canonicalize()
+        .map_err(|e| AppError::Other(format!("Cannot canonicalize repo root: {e}")))?;
+
+    let dir_path = canonical_root.join(relative_dir);
+    let canonical_dir = dir_path.canonicalize().map_err(|e| {
+        AppError::Other(format!("Cannot resolve directory '{relative_dir}': {e}"))
+    })?;
+
+    if !canonical_dir.starts_with(&canonical_root) {
+        return Err(AppError::Other("Path traversal detected".to_string()));
+    }
+    if !canonical_dir.is_dir() {
+        return Err(AppError::Other(format!("Not a directory: {relative_dir}")));
+    }
+
+    let walker = ignore::WalkBuilder::new(&canonical_dir)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(false)
+        .git_exclude(true)
+        .max_depth(Some(2))
+        .filter_entry(|e| e.file_name() != ".git")
+        .build();
+
+    let mut output = String::new();
+    for entry in walker.flatten() {
+        if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let path = entry.path();
+        let rel = path.strip_prefix(&canonical_root).unwrap_or(path);
+
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        if bytes.len() >= 512 && bytes[..512].contains(&0u8) {
+            continue;
+        }
+        let content = match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        let header = format!("### {}\n", rel.to_string_lossy());
+        if output.len() + header.len() + content.len() > max_chars {
+            output.push_str(&header);
+            let remaining = max_chars.saturating_sub(output.len());
+            let truncated: String = content.chars().take(remaining).collect();
+            output.push_str(&truncated);
+            output.push_str("\n...(truncated)\n\n");
+            break;
+        }
+        output.push_str(&header);
+        output.push_str(&content);
+        output.push_str("\n\n");
+    }
+
+    Ok(output)
+}
+
 /// Walk the top 2 levels, count files by extension, identify well-known dirs.
 /// Returns a human-readable summary string.
 pub fn generate_summary(repo_path: &Path) -> AppResult<String> {
@@ -227,8 +292,9 @@ pub fn search_files(
         if entry.path() == repo_path {
             continue;
         }
-        let ft = entry.file_type().map(|f| f.is_file()).unwrap_or(false);
-        if !ft {
+        let is_file = entry.file_type().map(|f| f.is_file()).unwrap_or(false);
+        let is_dir = entry.file_type().map(|f| f.is_dir()).unwrap_or(false);
+        if !is_file && !is_dir {
             continue;
         }
 
@@ -255,13 +321,19 @@ pub fn search_files(
             continue; // no match
         };
 
+        let display = if is_dir {
+            format!("{repo_name}/{rel_str}/")
+        } else {
+            format!("{repo_name}/{rel_str}")
+        };
+
         scored.push((
             score,
             FileSearchResult {
                 repo_id: repo_id.to_string(),
                 repo_name: repo_name.to_string(),
                 relative_path: rel_str.clone(),
-                display: format!("{repo_name}: {rel_str}"),
+                display,
             },
         ));
     }

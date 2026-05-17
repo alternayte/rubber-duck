@@ -238,6 +238,9 @@ Only extract tickets that are clearly implied by the notes. Don't invent work th
                 components={{
                   p: ({ children }) => <p>{processChildren(children)}</p>,
                   li: ({ children }) => <li>{processChildren(children)}</li>,
+                  img: ({ src, alt }) => (
+                    <img src={src} alt={alt || ""} className="max-w-full rounded-md my-2" />
+                  ),
                 }}
               >{content}</Markdown>
             ) : (

@@ -138,17 +138,23 @@ pub async fn send_message(
                 let repo_name = &mention[..slash_pos];
                 let file_path = &mention[slash_pos + 1..];
                 if let Some(repo) = repos.iter().find(|r| r.name == repo_name) {
-                    match repo_tree::read_file(std::path::Path::new(&repo.local_path), file_path) {
-                        Ok(file_content) => {
-                            let truncated = if file_content.chars().count() > 3000 {
-                                let t: String = file_content.chars().take(3000).collect();
+                    let repo_path = std::path::Path::new(&repo.local_path);
+                    let result = repo_tree::read_file(repo_path, file_path)
+                        .map(|c| {
+                            if c.chars().count() > 3000 {
+                                let t: String = c.chars().take(3000).collect();
                                 format!("{t}...")
                             } else {
-                                file_content
-                            };
+                                c
+                            }
+                        })
+                        .or_else(|_| repo_tree::read_directory(repo_path, file_path, 3000));
+
+                    match result {
+                        Ok(file_content) => {
                             files.push(RepoFileContext {
                                 display: mention.clone(),
-                                content: truncated,
+                                content: file_content,
                             });
                         }
                         Err(e) => tracing::warn!("Failed to read @{mention}: {e}"),
