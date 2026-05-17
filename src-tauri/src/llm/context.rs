@@ -1,4 +1,5 @@
 use crate::jira::model::JiraIssueContext;
+use crate::rag::model::RetrievedChunk;
 use crate::repo_context::model::RepoFileContext;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -67,6 +68,7 @@ pub fn assemble_context(
     jira_issues: &[JiraIssueContext],
     repo_summaries: &[String],
     mentioned_files: &[RepoFileContext],
+    retrieved_chunks: &[RetrievedChunk],
     conversation: &[(String, String)], // (role, content)
 ) -> Vec<ChatMessage> {
     let base_prompt = match mode {
@@ -129,6 +131,36 @@ pub fn assemble_context(
         system_parts.push(files_text);
     }
 
+    if !retrieved_chunks.is_empty() {
+        let mut rag_text = String::from(
+            "## Retrieved Code Context\nThe following code snippets were automatically retrieved from attached repositories as potentially relevant to this conversation. Use them to give accurate, grounded answers.\n\n",
+        );
+        for chunk in retrieved_chunks {
+            let lang = if chunk.file_path.ends_with(".rs") {
+                "rust"
+            } else if chunk.file_path.ends_with(".ts") || chunk.file_path.ends_with(".tsx") {
+                "typescript"
+            } else if chunk.file_path.ends_with(".py") {
+                "python"
+            } else if chunk.file_path.ends_with(".go") {
+                "go"
+            } else if chunk.file_path.ends_with(".java") {
+                "java"
+            } else if chunk.file_path.ends_with(".cs") {
+                "csharp"
+            } else if chunk.file_path.ends_with(".js") || chunk.file_path.ends_with(".jsx") {
+                "javascript"
+            } else {
+                ""
+            };
+            rag_text.push_str(&format!(
+                "### {}/{} (lines {}-{})\n```{lang}\n{}\n```\n\n",
+                chunk.repo_name, chunk.file_path, chunk.start_line, chunk.end_line, chunk.content,
+            ));
+        }
+        system_parts.push(rag_text);
+    }
+
     let mut messages = vec![ChatMessage {
         role: "system".to_string(),
         content: system_parts.join("\n\n"),
@@ -161,7 +193,7 @@ mod tests {
 
     #[test]
     fn system_message_includes_prompt() {
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &[], &[]);
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, "system");
         assert!(messages[0].content.contains("rubber-duck"));
@@ -169,13 +201,13 @@ mod tests {
 
     #[test]
     fn includes_session_context() {
-        let messages = assemble_context(&ChatMode::Assist, "We are migrating the auth service", "", &[], &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "We are migrating the auth service", "", &[], &[], &[], &[], &[], &[]);
         assert!(messages[0].content.contains("migrating the auth service"));
     }
 
     #[test]
     fn includes_note_content() {
-        let messages = assemble_context(&ChatMode::Assist, "", "# My brainstorm\nSome ideas here", &[], &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "# My brainstorm\nSome ideas here", &[], &[], &[], &[], &[], &[]);
         assert!(messages[0].content.contains("My brainstorm"));
     }
 
@@ -184,7 +216,7 @@ mod tests {
         let tickets = vec![
             ("Fix login".to_string(), "Task".to_string(), "High".to_string(), "Auth is broken".to_string()),
         ];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[], &[], &[], &[], &[]);
         assert!(messages[0].content.contains("Fix login"));
         assert!(messages[0].content.contains("Task"));
     }
@@ -195,7 +227,7 @@ mod tests {
             ("User".to_string(), "Break this into tickets".to_string()),
             ("Assistant".to_string(), "Here are 3 tickets...".to_string()),
         ];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &conversation);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &[], &conversation);
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].role, "user");
         assert_eq!(messages[2].role, "assistant");
@@ -209,14 +241,14 @@ mod tests {
                 (role.to_string(), format!("Message {i}"))
             })
             .collect();
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &conversation);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &[], &conversation);
         assert_eq!(messages.len(), 41); // system + 40 conversation
         assert!(messages[1].content.contains("Message 20")); // keeps LAST 40
     }
 
     #[test]
     fn grill_mode_uses_different_prompt() {
-        let messages = assemble_context(&ChatMode::Grill, "", "", &[], &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Grill, "", "", &[], &[], &[], &[], &[], &[]);
         assert_eq!(messages.len(), 1);
         assert!(messages[0].content.contains("critical technical reviewer"));
         assert!(!messages[0].content.contains("rubber-duck"));
@@ -233,7 +265,7 @@ mod tests {
             "High".to_string(),
             description,
         )];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &tickets, &[], &[], &[], &[], &[]);
         assert!(messages[0].content.contains("Test"));
         assert!(messages[0].content.contains("..."));
     }
@@ -250,7 +282,7 @@ mod tests {
                 description: "SSO times out after 30s".to_string(),
             },
         ];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &jira_issues, &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &jira_issues, &[], &[], &[], &[]);
         assert!(messages[0].content.contains("Referenced Jira Tickets"));
         assert!(messages[0].content.contains("FRONT-42"));
         assert!(messages[0].content.contains("Fix login timeout"));
@@ -259,14 +291,14 @@ mod tests {
 
     #[test]
     fn empty_jira_issues_omits_section() {
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &[], &[], &[]);
         assert!(!messages[0].content.contains("Referenced Jira Tickets"));
     }
 
     #[test]
     fn includes_repo_summaries() {
         let summaries = vec!["my-repo (245 files. Top types: .ts(120), .tsx(80). Key dirs: src/, tests/)".to_string()];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &summaries, &[], &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &summaries, &[], &[], &[]);
         assert!(messages[0].content.contains("Attached Repositories"));
         assert!(messages[0].content.contains("245 files"));
     }
@@ -277,7 +309,7 @@ mod tests {
             display: "my-repo/src/main.ts".to_string(),
             content: "console.log('hello')".to_string(),
         }];
-        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &files, &[]);
+        let messages = assemble_context(&ChatMode::Assist, "", "", &[], &[], &[], &files, &[], &[]);
         assert!(messages[0].content.contains("Referenced Files"));
         assert!(messages[0].content.contains("my-repo/src/main.ts"));
         assert!(messages[0].content.contains("console.log"));
@@ -295,5 +327,34 @@ mod tests {
         let text = "@repo/file.ts and again @repo/file.ts";
         let mentions = extract_at_mentions(text);
         assert_eq!(mentions, vec!["repo/file.ts"]);
+    }
+
+    #[test]
+    fn includes_retrieved_code_chunks() {
+        use crate::rag::model::RetrievedChunk;
+        let chunks = vec![
+            RetrievedChunk {
+                file_path: "src/auth.rs".to_string(),
+                repo_name: "my-repo".to_string(),
+                start_line: 42,
+                end_line: 78,
+                content: "fn authenticate() { verify(); }".to_string(),
+                score: 0.5,
+            },
+        ];
+        let messages = assemble_context(
+            &ChatMode::Assist, "", "", &[], &[], &[], &[], &chunks, &[],
+        );
+        assert!(messages[0].content.contains("Retrieved Code Context"));
+        assert!(messages[0].content.contains("my-repo/src/auth.rs"));
+        assert!(messages[0].content.contains("authenticate"));
+    }
+
+    #[test]
+    fn empty_retrieved_chunks_omits_section() {
+        let messages = assemble_context(
+            &ChatMode::Assist, "", "", &[], &[], &[], &[], &[], &[],
+        );
+        assert!(!messages[0].content.contains("Retrieved Code Context"));
     }
 }

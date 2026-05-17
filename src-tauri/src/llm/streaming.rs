@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use crate::db::Database;
 use crate::jira::client::{extract_jira_keys, JiraClient};
 use crate::jira::model::JiraIssueContext;
+use crate::rag::{embedder::Embedder, model::RetrievedChunk, search as rag_search};
 use crate::repo_context::{store as repo_store, tree as repo_tree, model::RepoFileContext};
 use crate::session::conversation_store;
 use crate::session::store as session_store;
@@ -30,6 +31,12 @@ struct DonePayload {
 #[derive(Clone, Serialize)]
 struct ErrorPayload {
     message: String,
+}
+
+#[derive(Clone, Serialize)]
+struct RagContextPayload {
+    file_count: usize,
+    repo_count: usize,
 }
 
 #[tauri::command]
@@ -166,6 +173,43 @@ pub async fn send_message(
         (summaries, files)
     };
 
+    let retrieved_chunks: Vec<RetrievedChunk> = {
+        let conn = db.conn().map_err(|e| e.to_string())?;
+        let repos = repo_store::list_by_session(&conn, &session_id)
+            .map_err(|e| e.to_string())?;
+        let repo_ids: Vec<String> = repos.iter().map(|r| r.id.clone()).collect();
+
+        let has_chunks: bool = repo_ids.iter().any(|rid| {
+            crate::rag::store::count_by_repo(&conn, rid).unwrap_or(0) > 0
+        });
+
+        if has_chunks {
+            let embedder: State<Embedder> = app.state::<Embedder>();
+            let query_texts = vec![content.clone()];
+            match embedder.embed(&query_texts) {
+                Ok(embeddings) if !embeddings.is_empty() => {
+                    rag_search::hybrid_search(&conn, &embeddings[0], &content, &repo_ids)
+                        .unwrap_or_default()
+                }
+                _ => vec![],
+            }
+        } else {
+            vec![]
+        }
+    };
+
+    if !retrieved_chunks.is_empty() {
+        let repo_names: std::collections::HashSet<&str> =
+            retrieved_chunks.iter().map(|c| c.repo_name.as_str()).collect();
+        let _ = app.emit(
+            "rag:context",
+            RagContextPayload {
+                file_count: retrieved_chunks.len(),
+                repo_count: repo_names.len(),
+            },
+        );
+    }
+
     let (messages, model) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
 
@@ -177,6 +221,7 @@ pub async fn send_message(
             &jira_issues,
             &repo_summaries,
             &mentioned_files,
+            &retrieved_chunks,
             &conversation,
         );
 
