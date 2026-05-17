@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use crate::db::Database;
 use crate::jira::client::{extract_jira_keys, JiraClient};
 use crate::jira::model::JiraIssueContext;
+use crate::repo_context::{store as repo_store, tree as repo_tree, model::RepoFileContext};
 use crate::session::conversation_store;
 use crate::session::store as session_store;
 use crate::session::note_store;
@@ -14,6 +15,7 @@ use crate::settings::store as settings_store;
 
 use super::client::{self, StreamEvent};
 use super::context;
+use super::context::extract_at_mentions;
 
 #[derive(Clone, Serialize)]
 struct ChunkPayload {
@@ -111,6 +113,53 @@ pub async fn send_message(
         vec![]
     };
 
+    let (repo_summaries, mentioned_files) = {
+        let conn = db.conn().map_err(|e| e.to_string())?;
+        let repos = repo_store::list_by_session(&conn, &session_id)
+            .map_err(|e| e.to_string())?;
+
+        let summaries: Vec<String> = repos
+            .iter()
+            .filter_map(|r| {
+                repo_tree::generate_summary(std::path::Path::new(&r.local_path))
+                    .ok()
+                    .map(|s| format!("{} ({})", r.name, s))
+            })
+            .collect();
+
+        let mut all_text = note_content.clone();
+        all_text.push(' ');
+        all_text.push_str(&content);
+        let mentions = extract_at_mentions(&all_text);
+
+        let mut files: Vec<RepoFileContext> = Vec::new();
+        for mention in &mentions {
+            if let Some(slash_pos) = mention.find('/') {
+                let repo_name = &mention[..slash_pos];
+                let file_path = &mention[slash_pos + 1..];
+                if let Some(repo) = repos.iter().find(|r| r.name == repo_name) {
+                    match repo_tree::read_file(std::path::Path::new(&repo.local_path), file_path) {
+                        Ok(file_content) => {
+                            let truncated = if file_content.chars().count() > 3000 {
+                                let t: String = file_content.chars().take(3000).collect();
+                                format!("{t}...")
+                            } else {
+                                file_content
+                            };
+                            files.push(RepoFileContext {
+                                display: mention.clone(),
+                                content: truncated,
+                            });
+                        }
+                        Err(e) => tracing::warn!("Failed to read @{mention}: {e}"),
+                    }
+                }
+            }
+        }
+
+        (summaries, files)
+    };
+
     let (messages, model) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
 
@@ -120,6 +169,8 @@ pub async fn send_message(
             &note_content,
             &tickets,
             &jira_issues,
+            &repo_summaries,
+            &mentioned_files,
             &conversation,
         );
 
