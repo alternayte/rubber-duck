@@ -23,6 +23,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .register_uri_scheme_protocol("rdimg", |ctx, request| {
             let make_response = |status: u16, body: Vec<u8>, content_type: &str| {
                 tauri::http::Response::builder()

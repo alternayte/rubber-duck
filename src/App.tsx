@@ -9,12 +9,13 @@ import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { apiKeySetAtom, jiraBaseUrlAtom, selectedModelAtom } from "@/features/settings/settings.atoms";
 import { ChatPanel } from "@/features/chat/ChatPanel";
 import { RepoPanel } from "@/features/repo/RepoPanel";
+import { DocsView } from "@/features/docs/DocsView";
 
-type Tab = "dump" | "refine" | "board";
+type Tab = "dump" | "docs" | "board";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "dump", label: "Dump" },
-  { id: "refine", label: "Refine" },
+  { id: "docs", label: "Docs" },
   { id: "board", label: "Board" },
 ];
 
@@ -108,10 +109,8 @@ function App() {
               {activeTab === "dump" && (
                 <DumpView sessionId={activeSession.id} />
               )}
-              {activeTab === "refine" && (
-                <p className="text-sm text-muted-foreground">
-                  Split pane refine view will go here
-                </p>
+              {activeTab === "docs" && (
+                <DocsView sessionId={activeSession.id} />
               )}
               {activeTab === "board" && (
                 <p className="text-sm text-muted-foreground">
