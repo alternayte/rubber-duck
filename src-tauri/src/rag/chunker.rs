@@ -154,10 +154,6 @@ pub fn chunk_file(
 
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
-        if child.is_extra() || child.kind() == "comment" {
-            // Treat as small node
-        }
-
         let node_start = child.start_position().row; // 0-indexed
         let node_end = child.end_position().row; // 0-indexed (inclusive)
         let start_1 = node_start + 1;

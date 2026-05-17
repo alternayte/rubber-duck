@@ -29,7 +29,7 @@ fn fuse_rrf(semantic: &[(i64, f64)], keyword: &[i64]) -> Vec<RankedChunk> {
         .map(|(chunk_id, rrf_score)| RankedChunk { chunk_id, rrf_score })
         .collect();
 
-    ranked.sort_by(|a, b| b.rrf_score.partial_cmp(&a.rrf_score).unwrap());
+    ranked.sort_by(|a, b| b.rrf_score.partial_cmp(&a.rrf_score).unwrap_or(std::cmp::Ordering::Equal));
     ranked
 }
 
