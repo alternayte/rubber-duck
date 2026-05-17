@@ -18,6 +18,7 @@ import {
 } from "./chat.atoms";
 import type { ConversationMessage } from "./chat.types";
 import { JiraLinkedText } from "@/components/JiraLinkedText";
+import { MentionText } from "@/components/MentionText";
 import { AtMentionInput } from "@/components/AtMentionInput";
 
 interface ErrorMessage {
@@ -26,13 +27,30 @@ interface ErrorMessage {
 }
 
 function processChildren(children: React.ReactNode): React.ReactNode {
-  return Array.isArray(children)
-    ? children.map((child, i) =>
-        typeof child === "string" ? <JiraLinkedText key={i}>{child}</JiraLinkedText> : child,
-      )
-    : typeof children === "string"
-      ? <JiraLinkedText>{children}</JiraLinkedText>
-      : children;
+  if (Array.isArray(children)) {
+    return children.map((child, i) =>
+      typeof child === "string" ? <LinkedText key={i}>{child}</LinkedText> : child,
+    );
+  }
+  return typeof children === "string" ? <LinkedText>{children}</LinkedText> : children;
+}
+
+function LinkedText({ children }: { children: string }) {
+  const MENTION_SPLIT = /(@[\w.\-]+\/[\w.\-/]+)/g;
+  const MENTION_TEST = /^@[\w.\-]+\/[\w.\-/]+$/;
+
+  const parts = children.split(MENTION_SPLIT);
+  return (
+    <>
+      {parts.map((part, i) =>
+        MENTION_TEST.test(part) ? (
+          <MentionText key={i}>{part}</MentionText>
+        ) : (
+          <JiraLinkedText key={i}>{part}</JiraLinkedText>
+        ),
+      )}
+    </>
+  );
 }
 
 export function ChatPanel() {
