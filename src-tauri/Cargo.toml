@@ -37,6 +37,8 @@ tracing-subscriber = "0.3"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 regex = "1"
+ignore = "0.4"
 
 [dev-dependencies]
 mockito = "1"
+tempfile = "3"
