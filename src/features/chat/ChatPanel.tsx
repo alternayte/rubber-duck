@@ -7,7 +7,6 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { activeSessionAtom } from "@/features/session/session.atoms";
 import { apiKeySetAtom, settingsOpenAtom } from "@/features/settings/settings.atoms";
 import {
@@ -19,6 +18,7 @@ import {
 } from "./chat.atoms";
 import type { ConversationMessage } from "./chat.types";
 import { JiraLinkedText } from "@/components/JiraLinkedText";
+import { AtMentionInput } from "@/components/AtMentionInput";
 
 interface ErrorMessage {
   id: string;
@@ -353,28 +353,23 @@ export function ChatPanel() {
 
       {/* Input */}
       <div className="border-t border-border p-3">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="flex gap-2"
-        >
-          <Input
+        <div className="flex gap-2">
+          <AtMentionInput
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={setInputValue}
+            onSubmit={handleSend}
+            sessionId={activeSession.id}
             placeholder={
               chatMode === "grill"
                 ? "Ask the duck to grill your plan..."
                 : "Ask the duck..."
             }
             disabled={isStreaming || editingMessageId != null}
-            className="flex-1 text-sm"
           />
-          <Button type="submit" size="sm" disabled={isStreaming || !inputValue.trim() || editingMessageId != null}>
+          <Button type="button" size="sm" onClick={handleSend} disabled={isStreaming || !inputValue.trim() || editingMessageId != null}>
             Send
           </Button>
-        </form>
+        </div>
       </div>
     </div>
   );
