@@ -9,6 +9,7 @@ use crate::jira::model::JiraIssueContext;
 use crate::llm::client::{self, StreamEvent};
 use crate::llm::context::ChatMessage;
 use crate::llm::models;
+use crate::rag::{embedder::Embedder, model::RetrievedChunk, search as rag_search};
 use crate::repo_context::{model::RepoFileContext, store as repo_store, tree as repo_tree};
 use crate::session::note_store;
 use crate::settings::commands::get_api_key_from_keyring;
@@ -135,6 +136,31 @@ pub async fn generate_section(
         (summaries, files)
     };
 
+    let retrieved_chunks: Vec<RetrievedChunk> = {
+        let conn = db.conn().map_err(|e| e.to_string())?;
+        let repos = repo_store::list_by_session(&conn, &session_id)
+            .map_err(|e| e.to_string())?;
+        let repo_ids: Vec<String> = repos.iter().map(|r| r.id.clone()).collect();
+
+        let has_chunks: bool = repo_ids.iter().any(|rid| {
+            crate::rag::store::count_by_repo(&conn, rid).unwrap_or(0) > 0
+        });
+
+        if has_chunks {
+            let embedder: State<Embedder> = app.state::<Embedder>();
+            let query_texts = vec![directive.clone()];
+            match embedder.embed(&query_texts) {
+                Ok(embeddings) if !embeddings.is_empty() => {
+                    rag_search::hybrid_search(&conn, &embeddings[0], &directive, &repo_ids)
+                        .unwrap_or_default()
+                }
+                _ => vec![],
+            }
+        } else {
+            vec![]
+        }
+    };
+
     let (messages, model) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
 
@@ -180,6 +206,18 @@ pub async fn generate_section(
                 repo_text.push_str(&format!("- {summary}\n"));
             }
             system_parts.push(repo_text);
+        }
+        if !retrieved_chunks.is_empty() {
+            let mut rag_text = String::from(
+                "## Retrieved Code Context\nRelevant code snippets from attached repositories:\n\n",
+            );
+            for chunk in &retrieved_chunks {
+                rag_text.push_str(&format!(
+                    "### {}/{} (lines {}-{})\n```\n{}\n```\n\n",
+                    chunk.repo_name, chunk.file_path, chunk.start_line, chunk.end_line, chunk.content,
+                ));
+            }
+            system_parts.push(rag_text);
         }
 
         let messages = vec![
