@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Input } from "@/components/ui/input";
 import type { FileSearchResult } from "@/features/repo/repo.types";
 
 interface AtMentionInputProps {
@@ -25,7 +24,7 @@ export function AtMentionInput({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState(-1);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const search = useCallback(
@@ -47,17 +46,30 @@ export function AtMentionInput({
     [sessionId],
   );
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function autoResize(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    const maxHeight = window.innerHeight * 0.4;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const newValue = e.target.value;
     onChange(newValue);
+
+    autoResize(e.target);
 
     const cursorPos = e.target.selectionStart ?? newValue.length;
     const textBeforeCursor = newValue.slice(0, cursorPos);
     const atIndex = textBeforeCursor.lastIndexOf("@");
 
-    if (atIndex >= 0 && (atIndex === 0 || textBeforeCursor[atIndex - 1] === " ")) {
+    if (
+      atIndex >= 0 &&
+      (atIndex === 0 ||
+        textBeforeCursor[atIndex - 1] === " " ||
+        textBeforeCursor[atIndex - 1] === "\n")
+    ) {
       const query = textBeforeCursor.slice(atIndex + 1);
-      if (!query.includes(" ")) {
+      if (!query.includes(" ") && !query.includes("\n")) {
         setMentionStart(atIndex);
         setMentionQuery(query);
         setShowDropdown(true);
@@ -74,7 +86,7 @@ export function AtMentionInput({
     const after = value.slice(mentionStart + 1 + mentionQuery.length);
     onChange(`${before}@${result.display}${after} `);
     setShowDropdown(false);
-    inputRef.current?.focus();
+    textareaRef.current?.focus();
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -100,11 +112,18 @@ export function AtMentionInput({
       }
     }
 
-    if (e.key === "Enter" && !showDropdown) {
+    if (e.key === "Enter" && !e.shiftKey && !showDropdown) {
       e.preventDefault();
       onSubmit();
     }
   }
+
+  // Auto-resize when value changes externally (e.g. cleared after submit)
+  useEffect(() => {
+    if (textareaRef.current) {
+      autoResize(textareaRef.current);
+    }
+  }, [value]);
 
   useEffect(() => {
     return () => {
@@ -112,32 +131,49 @@ export function AtMentionInput({
     };
   }, []);
 
+  // Split display into directory path + filename for richer dropdown rendering
+  function splitDisplay(display: string): { dir: string; file: string } {
+    const lastSlash = display.lastIndexOf("/");
+    if (lastSlash === -1) return { dir: "", file: display };
+    return {
+      dir: display.slice(0, lastSlash + 1),
+      file: display.slice(lastSlash + 1),
+    };
+  }
+
   return (
     <div className="relative flex-1">
-      <Input
-        ref={inputRef}
+      <textarea
+        ref={textareaRef}
+        rows={1}
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        className="text-sm"
+        className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       />
       {showDropdown && results.length > 0 && (
         <div className="absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover shadow-md z-50">
-          {results.map((result, i) => (
-            <button
-              key={result.display}
-              onClick={() => selectResult(result)}
-              className={`w-full text-left px-3 py-1.5 text-xs truncate ${
-                i === selectedIndex
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50"
-              }`}
-            >
-              {result.display}
-            </button>
-          ))}
+          {results.map((result, i) => {
+            const { dir, file } = splitDisplay(result.display);
+            return (
+              <button
+                key={result.display}
+                onClick={() => selectResult(result)}
+                className={`w-full text-left px-3 py-1.5 text-xs truncate ${
+                  i === selectedIndex
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50"
+                }`}
+              >
+                <span className="text-muted-foreground">{dir}</span>
+                <span className={i === selectedIndex ? "text-accent-foreground" : "text-foreground"}>
+                  {file}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

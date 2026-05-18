@@ -67,7 +67,7 @@ function App() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-background text-foreground select-none">
+    <div className="flex h-screen bg-background text-foreground">
       <SessionSidebar />
 
       {/* Main area */}
