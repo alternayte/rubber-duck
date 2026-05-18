@@ -10,6 +10,7 @@ fn row_to_message(row: &rusqlite::Row) -> rusqlite::Result<ConversationMessage> 
         role: row.get(1)?,
         content: row.get(2)?,
         created_at: row.get(3)?,
+        rag_context: row.get(4)?,
     })
 }
 
@@ -79,9 +80,25 @@ pub fn save_message(conn: &Connection, session_id: &str, thread_id: &str, role: 
     Ok(())
 }
 
+pub fn save_message_with_context(
+    conn: &Connection,
+    session_id: &str,
+    thread_id: &str,
+    role: &str,
+    content: &str,
+    rag_context: Option<&str>,
+) -> AppResult<()> {
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO conversations (id, session_id, thread_id, role, content, rag_context) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![id, session_id, thread_id, role, content, rag_context],
+    )?;
+    Ok(())
+}
+
 pub fn list_by_session(conn: &Connection, session_id: &str) -> AppResult<Vec<ConversationMessage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, role, content, created_at
+        "SELECT id, role, content, created_at, rag_context
          FROM conversations WHERE session_id = ?1
          ORDER BY created_at ASC",
     )?;
@@ -93,7 +110,7 @@ pub fn list_by_session(conn: &Connection, session_id: &str) -> AppResult<Vec<Con
 
 pub fn list_by_thread(conn: &Connection, thread_id: &str) -> AppResult<Vec<ConversationMessage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, role, content, created_at
+        "SELECT id, role, content, created_at, rag_context
          FROM conversations WHERE thread_id = ?1
          ORDER BY created_at ASC",
     )?;

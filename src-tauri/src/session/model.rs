@@ -54,6 +54,7 @@ pub struct ConversationMessage {
     pub role: String,
     pub content: String,
     pub created_at: String,
+    pub rag_context: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

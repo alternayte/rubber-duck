@@ -201,7 +201,7 @@ pub async fn send_message(
         }
     };
 
-    if !retrieved_chunks.is_empty() {
+    let rag_context_json: Option<String> = if !retrieved_chunks.is_empty() {
         let repo_names: std::collections::HashSet<&str> =
             retrieved_chunks.iter().map(|c| c.repo_name.as_str()).collect();
         let _ = app.emit(
@@ -211,7 +211,23 @@ pub async fn send_message(
                 repo_count: repo_names.len(),
             },
         );
-    }
+        serde_json::to_string(
+            &retrieved_chunks
+                .iter()
+                .map(|c| {
+                    serde_json::json!({
+                        "file_path": c.file_path,
+                        "repo_name": c.repo_name,
+                        "start_line": c.start_line,
+                        "end_line": c.end_line,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .ok()
+    } else {
+        None
+    };
 
     let (messages, model) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
@@ -247,6 +263,7 @@ pub async fn send_message(
     let app_clone = app.clone();
     let db_clone_session_id = session_id.clone();
     let db_clone_thread_id = thread_id.clone();
+    let rag_json_clone = rag_context_json.clone();
 
     let cancel_clone = cancel.clone();
     tokio::spawn(async move {
@@ -287,12 +304,13 @@ pub async fn send_message(
         if !full_content.is_empty() {
             let db: State<Database> = app_clone.state::<Database>();
             if let Ok(conn) = db.conn() {
-                if let Err(e) = conversation_store::save_message(
+                if let Err(e) = conversation_store::save_message_with_context(
                     &conn,
                     &db_clone_session_id,
                     &db_clone_thread_id,
                     "Assistant",
                     &full_content,
+                    rag_json_clone.as_deref(),
                 ) {
                     tracing::error!("Failed to save assistant message: {e}");
                     let _ = app_clone.emit(

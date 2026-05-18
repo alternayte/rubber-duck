@@ -21,7 +21,7 @@ import {
   ragContextAtom,
   streamingContentAtom,
 } from "./chat.atoms";
-import type { ChatThread, ConversationMessage } from "./chat.types";
+import type { ChatThread, ConversationMessage, RagChunkInfo } from "./chat.types";
 import { JiraLinkedText } from "@/components/JiraLinkedText";
 import { MentionText } from "@/components/MentionText";
 import { AtMentionInput } from "@/components/AtMentionInput";
@@ -402,6 +402,24 @@ export function ChatPanel() {
                       components={markdownComponents(processChildren)}
                     >{msg.content}</Markdown>
                   </div>
+                  {msg.role === "Assistant" && msg.rag_context && (() => {
+                    const chunks: RagChunkInfo[] = JSON.parse(msg.rag_context);
+                    const repos = new Set(chunks.map((c: RagChunkInfo) => c.repo_name));
+                    return (
+                      <details className="mt-1 text-[11px] text-muted-foreground/70">
+                        <summary className="cursor-pointer hover:text-muted-foreground">
+                          Used {chunks.length} file{chunks.length !== 1 ? "s" : ""} from {repos.size} repo{repos.size !== 1 ? "s" : ""}
+                        </summary>
+                        <div className="mt-1 space-y-0.5 pl-2">
+                          {chunks.map((c: RagChunkInfo, i: number) => (
+                            <div key={i} className="font-mono">
+                              {c.repo_name}/{c.file_path} L{c.start_line}-{c.end_line}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    );
+                  })()}
                 </div>
               )}
             </div>

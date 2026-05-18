@@ -8,6 +8,69 @@ use crate::rag::model::RetrievedChunk;
 const RRF_K: f64 = 60.0;
 const TOP_K: usize = 8;
 
+pub fn extract_search_terms(text: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+
+    // CamelCase identifiers
+    let camel_re = regex::Regex::new(r"\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b").unwrap();
+    for m in camel_re.find_iter(text) {
+        terms.push(m.as_str().to_string());
+    }
+
+    // snake_case identifiers
+    let snake_re = regex::Regex::new(r"\b[a-z]+(?:_[a-z]+)+\b").unwrap();
+    for m in snake_re.find_iter(text) {
+        terms.push(m.as_str().to_string());
+    }
+
+    // Quoted strings
+    let quote_re = regex::Regex::new(r#""([^"]+)""#).unwrap();
+    for cap in quote_re.captures_iter(text) {
+        if let Some(m) = cap.get(1) {
+            terms.push(m.as_str().to_string());
+        }
+    }
+
+    // @mentions (strip the @)
+    let mention_re = regex::Regex::new(r"@([\w.\-]+/[\w.\-/]+)").unwrap();
+    for cap in mention_re.captures_iter(text) {
+        if let Some(m) = cap.get(1) {
+            terms.push(m.as_str().to_string());
+        }
+    }
+
+    terms.dedup();
+    terms
+}
+
+pub fn build_expanded_fts_query(user_text: &str) -> String {
+    let terms = extract_search_terms(user_text);
+    let words: Vec<&str> = user_text
+        .split_whitespace()
+        .filter(|w| w.len() > 3)
+        .take(10)
+        .collect();
+
+    let mut fts_parts: Vec<String> = terms.iter().map(|t| format!("\"{t}\"")).collect();
+    for w in words {
+        let cleaned = w.trim_matches(|c: char| !c.is_alphanumeric());
+        if cleaned.len() > 3 && !fts_parts.iter().any(|p| p.contains(cleaned)) {
+            fts_parts.push(format!("\"{cleaned}\""));
+        }
+    }
+
+    if fts_parts.is_empty() {
+        return format!("\"{}\"", user_text.replace('"', "\"\""));
+    }
+
+    fts_parts.join(" OR ")
+}
+
+pub fn adaptive_top_k(text: &str) -> usize {
+    let terms = extract_search_terms(text);
+    if terms.len() > 3 { 15 } else { TOP_K }
+}
+
 struct RankedChunk {
     chunk_id: i64,
     rrf_score: f64,
@@ -75,6 +138,7 @@ pub fn hybrid_search(
         .collect();
 
     // Keyword search via FTS5 — gracefully handle FTS syntax errors
+    let expanded_query = build_expanded_fts_query(query_text);
     let fts_query = format!(
         "SELECT cf.rowid FROM code_chunks_fts cf
          JOIN code_chunks cc ON cc.id = cf.rowid
@@ -83,7 +147,7 @@ pub fn hybrid_search(
          LIMIT 20"
     );
     let mut fts_params: Vec<Box<dyn rusqlite::types::ToSql>> =
-        vec![Box::new(query_text.to_string())];
+        vec![Box::new(expanded_query)];
     for rid in repo_ids {
         fts_params.push(Box::new(rid.clone()));
     }
@@ -102,9 +166,10 @@ pub fn hybrid_search(
 
     // RRF fusion
     let ranked = fuse_rrf(&semantic, &keyword);
+    let top_k = adaptive_top_k(query_text);
 
     // Fetch chunk details for top results
-    let top_ids: Vec<i64> = ranked.iter().take(TOP_K).map(|r| r.chunk_id).collect();
+    let top_ids: Vec<i64> = ranked.iter().take(top_k).map(|r| r.chunk_id).collect();
     if top_ids.is_empty() {
         return Ok(vec![]);
     }
@@ -136,7 +201,7 @@ pub fn hybrid_search(
 
     let results: Vec<RetrievedChunk> = ranked
         .iter()
-        .take(TOP_K)
+        .take(top_k)
         .filter_map(|r| {
             details.get(&r.chunk_id).map(|chunk| {
                 let mut c = chunk.clone();
