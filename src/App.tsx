@@ -10,6 +10,7 @@ import { apiKeySetAtom, jiraBaseUrlAtom, selectedModelAtom } from "@/features/se
 import { ChatPanel } from "@/features/chat/ChatPanel";
 import { RepoPanel } from "@/features/repo/RepoPanel";
 import { DocsView } from "@/features/docs/DocsView";
+import { SearchPalette } from "@/components/SearchPalette";
 
 type Tab = "dump" | "docs" | "board";
 
@@ -26,6 +27,7 @@ const MAX_PANEL_WIDTH = 800;
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("dump");
   const [sidePanelOpen, setSidePanelOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const isResizing = useRef(false);
   const activeSession = useAtomValue(activeSessionAtom);
@@ -41,6 +43,17 @@ function App() {
     invoke<{ base_url: string; auth_method: string; email: string | null } | null>("get_jira_config").then((config) => {
       if (config?.base_url) setJiraBaseUrl(config.base_url);
     });
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const handleMouseDown = useCallback(() => {
@@ -134,6 +147,11 @@ function App() {
           <ChatPanel />
         </aside>
       )}
+      <SearchPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={(tab) => setActiveTab(tab as Tab)}
+      />
       <SettingsDialog />
     </div>
   );
