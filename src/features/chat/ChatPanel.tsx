@@ -5,12 +5,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Pencil, Square } from "lucide-react";
+import { Copy, Pencil, Plus, Square } from "lucide-react";
 import { CodeBlock } from "@/components/CodeBlock";
 import { Button } from "@/components/ui/button";
 import { activeSessionAtom } from "@/features/session/session.atoms";
 import { apiKeySetAtom, settingsOpenAtom } from "@/features/settings/settings.atoms";
 import {
+  activeThreadIdAtom,
+  activeThreadAtom,
+  chatThreadsAtom,
   chatModeAtom,
   conversationAtom,
   isExtractingAtom,
@@ -18,7 +21,7 @@ import {
   ragContextAtom,
   streamingContentAtom,
 } from "./chat.atoms";
-import type { ConversationMessage } from "./chat.types";
+import type { ChatThread, ConversationMessage } from "./chat.types";
 import { JiraLinkedText } from "@/components/JiraLinkedText";
 import { MentionText } from "@/components/MentionText";
 import { AtMentionInput } from "@/components/AtMentionInput";
@@ -95,6 +98,10 @@ export function ChatPanel() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
 
+  const activeThread = useAtomValue(activeThreadAtom);
+  const [, setActiveThreadId] = useAtom(activeThreadIdAtom);
+  const [chatThreads, setChatThreads] = useAtom(chatThreadsAtom);
+
   useEffect(() => {
     isExtractingRef.current = isExtracting;
   }, [isExtracting]);
@@ -113,14 +120,14 @@ export function ChatPanel() {
   }
 
   useEffect(() => {
-    if (!activeSession) {
+    if (!activeThread) {
       setConversation([]);
       return;
     }
     invoke<ConversationMessage[]>("get_conversation", {
-      sessionId: activeSession.id,
+      threadId: activeThread.id,
     }).then(setConversation);
-  }, [activeSession?.id]);
+  }, [activeThread?.id]);
 
   useEffect(() => {
     const promises = [
@@ -140,9 +147,9 @@ export function ChatPanel() {
         setIsStreaming(false);
         setStreamingContent("");
         setRagContext(null);
-        if (activeSession) {
+        if (activeThread) {
           invoke<ConversationMessage[]>("get_conversation", {
-            sessionId: activeSession.id,
+            threadId: activeThread.id,
           }).then(setConversation);
         }
       }),
@@ -169,7 +176,7 @@ export function ChatPanel() {
     return () => {
       promises.forEach((p) => p.then((unlisten) => unlisten()));
     };
-  }, [activeSession?.id]);
+  }, [activeThread?.id]);
 
   useEffect(() => {
     scrollToBottom();
@@ -177,7 +184,7 @@ export function ChatPanel() {
 
   async function handleSend() {
     const text = inputValue.trim();
-    if (!text || !activeSession || isStreaming) return;
+    if (!text || !activeSession || !activeThread || isStreaming) return;
 
     setInputValue("");
     setErrors([]);
@@ -188,6 +195,7 @@ export function ChatPanel() {
 
     await invoke("send_message", {
       sessionId: activeSession.id,
+      threadId: activeThread.id,
       content: text,
       mode: chatMode,
     });
@@ -195,7 +203,7 @@ export function ChatPanel() {
 
   async function handleEditSubmit() {
     const text = editingContent.trim();
-    if (!text || !activeSession || isStreaming) return;
+    if (!text || !activeSession || !activeThread || isStreaming) return;
 
     const messageId = editingMessageId;
     setEditingMessageId(null);
@@ -207,17 +215,18 @@ export function ChatPanel() {
     shouldAutoScroll.current = true;
 
     await invoke("delete_conversation_from", {
-      sessionId: activeSession.id,
+      threadId: activeThread.id,
       messageId,
     });
 
     const updated = await invoke<ConversationMessage[]>("get_conversation", {
-      sessionId: activeSession.id,
+      threadId: activeThread.id,
     });
     setConversation(updated);
 
     await invoke("send_message", {
       sessionId: activeSession.id,
+      threadId: activeThread.id,
       content: text,
       mode: chatMode,
     });
@@ -228,7 +237,7 @@ export function ChatPanel() {
     await invoke("cancel_generation", { sessionId: activeSession.id });
   }
 
-  if (!activeSession) {
+  if (!activeSession || !activeThread) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-4">
         <p className="text-xs text-muted-foreground/60">
@@ -255,8 +264,28 @@ export function ChatPanel() {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-2">
-        <h2 className="text-sm font-medium text-muted-foreground">Duck Chat</h2>
+        <h2 className="text-sm font-medium text-muted-foreground truncate">
+          {activeThread?.title ?? "Duck Chat"}
+        </h2>
         <div className="ml-auto flex gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={async () => {
+              if (!activeSession) return;
+              const count = chatThreads.length + 1;
+              const thread = await invoke<ChatThread>("create_chat_thread", {
+                sessionId: activeSession.id,
+                title: `Chat ${count}`,
+              });
+              setChatThreads([...chatThreads, thread]);
+              setActiveThreadId(thread.id);
+            }}
+            className="text-muted-foreground"
+            title="New chat"
+          >
+            <Plus className="size-3.5" />
+          </Button>
           <Button
             variant={chatMode === "assist" ? "secondary" : "ghost"}
             size="xs"

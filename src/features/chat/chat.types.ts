@@ -4,3 +4,11 @@ export interface ConversationMessage {
   content: string;
   created_at: string;
 }
+
+export interface ChatThread {
+  id: string;
+  session_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
