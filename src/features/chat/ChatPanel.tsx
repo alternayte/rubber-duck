@@ -5,7 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Pencil, Square } from "lucide-react";
+import { Copy, Pencil, Square } from "lucide-react";
+import { CodeBlock } from "@/components/CodeBlock";
 import { Button } from "@/components/ui/button";
 import { activeSessionAtom } from "@/features/session/session.atoms";
 import { apiKeySetAtom, settingsOpenAtom } from "@/features/settings/settings.atoms";
@@ -52,6 +53,25 @@ function LinkedText({ children }: { children: string }) {
       )}
     </>
   );
+}
+
+function markdownComponents(processChildrenFn: typeof processChildren) {
+  return {
+    p: ({ children }: { children?: React.ReactNode }) => <p>{processChildrenFn(children)}</p>,
+    li: ({ children }: { children?: React.ReactNode }) => <li>{processChildrenFn(children)}</li>,
+    code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<"code"> & { inline?: boolean }) => {
+      const match = /language-(\w+)/.exec(className || "");
+      const codeString = String(children).replace(/\n$/, "");
+      if (match) {
+        return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
+      }
+      return (
+        <code className="rounded bg-muted px-1 py-0.5 text-sm font-mono" {...props}>
+          {children}
+        </code>
+      );
+    },
+  };
 }
 
 export function ChatPanel() {
@@ -338,14 +358,19 @@ export function ChatPanel() {
                   )}
                 </div>
               ) : (
-                <div className="prose prose-invert prose-sm max-w-none">
-                  <Markdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      p: ({ children }) => <p>{processChildren(children)}</p>,
-                      li: ({ children }) => <li>{processChildren(children)}</li>,
-                    }}
-                  >{msg.content}</Markdown>
+                <div className="relative group/msg">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(msg.content)}
+                    className="absolute top-0 right-0 hidden group-hover/msg:flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground z-10"
+                  >
+                    <Copy className="size-3" /> Copy
+                  </button>
+                  <div className="prose prose-invert prose-sm max-w-none">
+                    <Markdown
+                      remarkPlugins={[remarkGfm]}
+                      components={markdownComponents(processChildren)}
+                    >{msg.content}</Markdown>
+                  </div>
                 </div>
               )}
             </div>
@@ -361,7 +386,12 @@ export function ChatPanel() {
 
         {isStreaming && streamingContent && (
           <div className="mr-4 text-sm">
-            <p className="whitespace-pre-wrap">{streamingContent}</p>
+            <div className="prose prose-invert prose-sm max-w-none">
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                components={markdownComponents(processChildren)}
+              >{streamingContent}</Markdown>
+            </div>
           </div>
         )}
 

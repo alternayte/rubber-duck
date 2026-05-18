@@ -14,6 +14,7 @@ import { useTicketActions } from "@/features/ticket/useTicketActions";
 import { parseTicketsFromResponse } from "@/features/ticket/extractTickets";
 import { JiraLinkedText } from "@/components/JiraLinkedText";
 import { MentionText } from "@/components/MentionText";
+import { CodeBlock } from "@/components/CodeBlock";
 
 interface Note {
   id: string;
@@ -245,6 +246,18 @@ Only extract tickets that are clearly implied by the notes. Don't invent work th
                   img: ({ src, alt }) => (
                     <img src={src} alt={alt || ""} className="max-w-full rounded-md my-2" />
                   ),
+                  code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<"code"> & { inline?: boolean }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const codeString = String(children).replace(/\n$/, "");
+                    if (match) {
+                      return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
+                    }
+                    return (
+                      <code className="rounded bg-muted px-1 py-0.5 text-sm font-mono" {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
                 }}
               >{content}</Markdown>
             ) : (

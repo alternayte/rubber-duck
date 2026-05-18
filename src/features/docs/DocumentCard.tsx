@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type React from "react";
 import { useAtomValue } from "jotai";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -17,6 +18,7 @@ import remarkGfm from "remark-gfm";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/button";
+import { CodeBlock } from "@/components/CodeBlock";
 import { sectionsByDocAtom, sectionGenerationAtom } from "./docs.atoms";
 import { VersionHistory } from "./VersionHistory";
 import { useDocActions } from "./useDocActions";
@@ -295,7 +297,23 @@ function SectionRow({
             </div>
           ) : displayContent ? (
             <div className="prose prose-invert prose-sm max-w-none">
-              <Markdown remarkPlugins={[remarkGfm]}>{displayContent}</Markdown>
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<"code"> & { inline?: boolean }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const codeString = String(children).replace(/\n$/, "");
+                    if (match) {
+                      return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
+                    }
+                    return (
+                      <code className="rounded bg-muted px-1 py-0.5 text-sm font-mono" {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+              >{displayContent}</Markdown>
             </div>
           ) : !isGenerating ? (
             <p className="text-xs text-muted-foreground/60 italic">
