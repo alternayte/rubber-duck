@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Pencil } from "lucide-react";
+import { Pencil, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { activeSessionAtom } from "@/features/session/session.atoms";
 import { apiKeySetAtom, settingsOpenAtom } from "@/features/settings/settings.atoms";
@@ -199,6 +199,11 @@ export function ChatPanel() {
       content: text,
       mode: chatMode,
     });
+  }
+
+  async function handleCancel() {
+    if (!activeSession) return;
+    await invoke("cancel_generation", { sessionId: activeSession.id });
   }
 
   if (!activeSession) {
@@ -403,9 +408,25 @@ export function ChatPanel() {
             }
             disabled={isStreaming || editingMessageId != null}
           />
-          <Button type="button" size="sm" onClick={handleSend} disabled={isStreaming || !inputValue.trim() || editingMessageId != null}>
-            Send
-          </Button>
+          {isStreaming ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={handleCancel}
+            >
+              <Square className="size-3.5 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSend}
+              disabled={!inputValue.trim() || editingMessageId != null}
+            >
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

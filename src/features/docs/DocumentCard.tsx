@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAtomValue } from "jotai";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ChevronDown,
   ChevronRight,
@@ -8,6 +9,7 @@ import {
   History,
   Pencil,
   RefreshCw,
+  Square,
   Trash2,
 } from "lucide-react";
 import Markdown from "react-markdown";
@@ -223,16 +225,27 @@ function SectionRow({
           >
             <History className="size-3" />
           </Button>
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={onRegenerate}
-            disabled={isGenerating}
-            className="size-6 p-0 text-muted-foreground"
-            title="Regenerate"
-          >
-            <RefreshCw className={`size-3 ${isGenerating ? "animate-spin" : ""}`} />
-          </Button>
+          {isGenerating ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => invoke("cancel_generation", { sessionId: section.id })}
+              className="size-6 p-0 text-destructive"
+              title="Stop generating"
+            >
+              <Square className="size-3 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={onRegenerate}
+              className="size-6 p-0 text-muted-foreground"
+              title="Regenerate"
+            >
+              <RefreshCw className="size-3" />
+            </Button>
+          )}
           <Button
             size="xs"
             variant="ghost"
