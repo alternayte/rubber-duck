@@ -2,8 +2,10 @@ use rusqlite::params;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use crate::db::Database;
+use crate::CancellationTokens;
 use crate::jira::client::{extract_jira_keys, JiraClient};
 use crate::jira::model::JiraIssueContext;
 use crate::rag::{embedder::Embedder, model::RetrievedChunk, search as rag_search};
@@ -234,11 +236,19 @@ pub async fn send_message(
 
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(100);
 
+    let cancel = CancellationToken::new();
+    {
+        let tokens: State<CancellationTokens> = app.state::<CancellationTokens>();
+        let mut map = tokens.tokens.lock().unwrap();
+        map.insert(session_id.clone(), cancel.clone());
+    }
+
     let app_clone = app.clone();
     let db_clone_session_id = session_id.clone();
 
+    let cancel_clone = cancel.clone();
     tokio::spawn(async move {
-        client::stream_completion(&api_key, &model, messages, tx).await;
+        client::stream_completion(&api_key, &model, messages, tx, cancel_clone).await;
     });
 
     tokio::spawn(async move {
@@ -265,6 +275,13 @@ pub async fn send_message(
             }
         }
 
+        app_clone
+            .state::<CancellationTokens>()
+            .tokens
+            .lock()
+            .ok()
+            .map(|mut m| m.remove(&db_clone_session_id));
+
         if !full_content.is_empty() {
             let db: State<Database> = app_clone.state::<Database>();
             if let Ok(conn) = db.conn() {
@@ -287,5 +304,18 @@ pub async fn send_message(
         }
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_generation(
+    app: AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    let tokens: State<CancellationTokens> = app.state::<CancellationTokens>();
+    let map = tokens.tokens.lock().map_err(|e| e.to_string())?;
+    if let Some(token) = map.get(&session_id) {
+        token.cancel();
+    }
     Ok(())
 }

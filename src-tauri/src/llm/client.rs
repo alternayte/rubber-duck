@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{AppError, AppResult};
 
@@ -45,8 +46,9 @@ pub async fn stream_completion(
     model: &str,
     messages: Vec<ChatMessage>,
     tx: mpsc::Sender<StreamEvent>,
+    cancel: CancellationToken,
 ) {
-    let result = stream_inner(api_key, model, messages, &tx).await;
+    let result = stream_inner(api_key, model, messages, &tx, &cancel).await;
     if let Err(e) = result {
         let _ = tx.send(StreamEvent::Error(e.to_string())).await;
     }
@@ -57,6 +59,7 @@ async fn stream_inner(
     model: &str,
     messages: Vec<ChatMessage>,
     tx: &mpsc::Sender<StreamEvent>,
+    cancel: &CancellationToken,
 ) -> AppResult<()> {
     let client = Client::builder()
         .timeout(Duration::from_secs(120))
@@ -89,7 +92,16 @@ async fn stream_inner(
     let mut buffer = String::new();
     let mut full_content = String::new();
 
-    while let Some(chunk) = stream.next().await {
+    loop {
+        let chunk = tokio::select! {
+            _ = cancel.cancelled() => {
+                let _ = tx.send(StreamEvent::Done(full_content)).await;
+                return Ok(());
+            }
+            chunk = stream.next() => chunk,
+        };
+
+        let Some(chunk) = chunk else { break; };
         let chunk = chunk.map_err(|e| AppError::Other(e.to_string()))?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 

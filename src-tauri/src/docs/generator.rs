@@ -2,8 +2,10 @@ use rusqlite::params;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use crate::db::Database;
+use crate::CancellationTokens;
 use crate::jira::client::{extract_jira_keys, JiraClient};
 use crate::jira::model::JiraIssueContext;
 use crate::llm::client::{self, StreamEvent};
@@ -240,11 +242,19 @@ pub async fn generate_section(
 
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(100);
 
+    let cancel = CancellationToken::new();
+    {
+        let tokens: State<CancellationTokens> = app.state::<CancellationTokens>();
+        let mut map = tokens.tokens.lock().unwrap();
+        map.insert(section_id.clone(), cancel.clone());
+    }
+
     let app_clone = app.clone();
     let section_id_clone = section_id.clone();
 
+    let cancel_clone = cancel.clone();
     tokio::spawn(async move {
-        client::stream_completion(&api_key, &model, messages, tx).await;
+        client::stream_completion(&api_key, &model, messages, tx, cancel_clone).await;
     });
 
     tokio::spawn(async move {
@@ -283,6 +293,13 @@ pub async fn generate_section(
                 }
             }
         }
+
+        app_clone
+            .state::<CancellationTokens>()
+            .tokens
+            .lock()
+            .ok()
+            .map(|mut m| m.remove(&section_id_clone));
 
         if !full_content.is_empty() {
             let db: State<Database> = app_clone.state::<Database>();

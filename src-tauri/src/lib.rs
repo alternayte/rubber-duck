@@ -9,9 +9,17 @@ mod repo_context;
 mod ticket;
 mod rag;
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+use tokio_util::sync::CancellationToken;
+
 use tauri::Manager;
 
 use db::Database;
+
+pub struct CancellationTokens {
+    pub tokens: Mutex<HashMap<String, CancellationToken>>,
+}
 use docs::commands::*;
 use session::commands::*;
 use settings::commands::*;
@@ -93,6 +101,7 @@ pub fn run() {
             has_api_key,
             get_available_models,
             llm::streaming::send_message,
+            llm::streaming::cancel_generation,
             create_ticket,
             get_ticket,
             list_tickets,
@@ -140,6 +149,9 @@ pub fn run() {
             let db_path = app_dir.join("rubber-duck.db");
             let db = Database::open(db_path.to_str().expect("invalid db path"))?;
             app.manage(db);
+            app.manage(CancellationTokens {
+                tokens: Mutex::new(HashMap::new()),
+            });
             let models_dir = app_dir.join("models");
             std::fs::create_dir_all(&models_dir)?;
             app.manage(rag::embedder::Embedder::new(models_dir));
