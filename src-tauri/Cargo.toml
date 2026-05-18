@@ -29,6 +29,7 @@ serde_json = "1"
 rusqlite = { version = "0.39", features = ["bundled"] }
 reqwest = { version = "0.13", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"

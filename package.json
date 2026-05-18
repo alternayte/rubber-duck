@@ -31,14 +31,17 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "textarea-caret": "^3.1.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.6.0",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.8.3",
