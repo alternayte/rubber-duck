@@ -55,3 +55,12 @@ pub struct ConversationMessage {
     pub content: String,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatThread {
+    pub id: String,
+    pub session_id: String,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+}

@@ -46,6 +46,7 @@ pub async fn send_message(
     app: AppHandle,
     db: State<'_, Database>,
     session_id: String,
+    thread_id: String,
     content: String,
     mode: String,
 ) -> Result<(), String> {
@@ -60,7 +61,7 @@ pub async fn send_message(
     let (session_context, note_content, tickets, conversation, jira_keys) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
 
-        conversation_store::save_message(&conn, &session_id, "User", &content)
+        conversation_store::save_message(&conn, &session_id, &thread_id, "User", &content)
             .map_err(|e| e.to_string())?;
 
         let session = session_store::get(&conn, &session_id).map_err(|e| e.to_string())?;
@@ -84,11 +85,11 @@ pub async fn send_message(
 
         let mut conv_stmt = conn
             .prepare(
-                "SELECT role, content FROM conversations WHERE session_id = ?1 ORDER BY created_at ASC",
+                "SELECT role, content FROM conversations WHERE thread_id = ?1 ORDER BY created_at ASC",
             )
             .map_err(|e| e.to_string())?;
         let conversation: Vec<(String, String)> = conv_stmt
-            .query_map(params![session_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map(params![thread_id], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
@@ -245,6 +246,7 @@ pub async fn send_message(
 
     let app_clone = app.clone();
     let db_clone_session_id = session_id.clone();
+    let db_clone_thread_id = thread_id.clone();
 
     let cancel_clone = cancel.clone();
     tokio::spawn(async move {
@@ -288,6 +290,7 @@ pub async fn send_message(
                 if let Err(e) = conversation_store::save_message(
                     &conn,
                     &db_clone_session_id,
+                    &db_clone_thread_id,
                     "Assistant",
                     &full_content,
                 ) {

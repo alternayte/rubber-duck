@@ -3,7 +3,7 @@ use tauri::State;
 
 use crate::db::Database;
 
-use super::model::{ConversationMessage, Note, Session};
+use super::model::{ChatThread, ConversationMessage, Note, Session};
 use super::note_store;
 use super::store;
 
@@ -64,21 +64,58 @@ pub fn update_note(
 #[tauri::command]
 pub fn get_conversation(
     db: State<Database>,
-    session_id: String,
+    thread_id: String,
 ) -> Result<Vec<ConversationMessage>, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
-    super::conversation_store::list_by_session(&conn, &session_id).map_err(|e| e.to_string())
+    super::conversation_store::list_by_thread(&conn, &thread_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn delete_conversation_from(
     db: State<Database>,
-    session_id: String,
+    thread_id: String,
     message_id: String,
 ) -> Result<usize, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
-    super::conversation_store::delete_from_message(&conn, &session_id, &message_id)
+    super::conversation_store::delete_from_message(&conn, &thread_id, &message_id)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_chat_thread(
+    db: State<Database>,
+    session_id: String,
+    title: String,
+) -> Result<ChatThread, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    super::conversation_store::create_thread(&conn, &session_id, &title)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_chat_threads(
+    db: State<Database>,
+    session_id: String,
+) -> Result<Vec<ChatThread>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    super::conversation_store::list_threads(&conn, &session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rename_chat_thread(
+    db: State<Database>,
+    thread_id: String,
+    title: String,
+) -> Result<ChatThread, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    super::conversation_store::rename_thread(&conn, &thread_id, &title)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_chat_thread(db: State<Database>, thread_id: String) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    super::conversation_store::delete_thread(&conn, &thread_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
