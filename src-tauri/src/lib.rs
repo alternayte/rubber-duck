@@ -2,6 +2,7 @@ mod db;
 mod docs;
 mod error;
 mod llm;
+mod search;
 mod session;
 mod settings;
 mod jira;
@@ -21,6 +22,7 @@ pub struct CancellationTokens {
     pub tokens: Mutex<HashMap<String, CancellationToken>>,
 }
 use docs::commands::*;
+use search::commands::*;
 use session::commands::*;
 use settings::commands::*;
 use ticket::commands::*;
@@ -146,6 +148,7 @@ pub fn run() {
             index_repo,
             get_index_status,
             reindex_repo,
+            search_all,
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
