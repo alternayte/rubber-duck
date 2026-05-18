@@ -39,7 +39,7 @@ function App() {
       if (val) setSelectedModel(val);
     });
     invoke<{ base_url: string; auth_method: string; email: string | null } | null>("get_jira_config").then((config) => {
-      if (config) setJiraBaseUrl(config.base_url);
+      if (config?.base_url) setJiraBaseUrl(config.base_url);
     });
   }, []);
 

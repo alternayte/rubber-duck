@@ -59,6 +59,8 @@ function markdownComponents(processChildrenFn: typeof processChildren) {
   return {
     p: ({ children }: { children?: React.ReactNode }) => <p>{processChildrenFn(children)}</p>,
     li: ({ children }: { children?: React.ReactNode }) => <li>{processChildrenFn(children)}</li>,
+    strong: ({ children }: { children?: React.ReactNode }) => <strong>{processChildrenFn(children)}</strong>,
+    em: ({ children }: { children?: React.ReactNode }) => <em>{processChildrenFn(children)}</em>,
     code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<"code"> & { inline?: boolean }) => {
       const match = /language-(\w+)/.exec(className || "");
       const codeString = String(children).replace(/\n$/, "");
