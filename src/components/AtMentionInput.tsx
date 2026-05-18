@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import getCaretCoordinates from "textarea-caret";
 import type { FileSearchResult } from "@/features/repo/repo.types";
 
 interface AtMentionInputProps {
@@ -24,6 +26,7 @@ export function AtMentionInput({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState(-1);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -74,6 +77,15 @@ export function AtMentionInput({
         setMentionQuery(query);
         setShowDropdown(true);
         search(query);
+        const el = textareaRef.current;
+        if (el) {
+          const coords = getCaretCoordinates(el, atIndex);
+          const rect = el.getBoundingClientRect();
+          setDropdownPos({
+            top: rect.top + coords.top - el.scrollTop,
+            left: rect.left + coords.left,
+          });
+        }
         return;
       }
     }
@@ -153,29 +165,38 @@ export function AtMentionInput({
         disabled={disabled}
         className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       />
-      {showDropdown && results.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover shadow-md z-50">
-          {results.map((result, i) => {
-            const { dir, file } = splitDisplay(result.display);
-            return (
-              <button
-                key={result.display}
-                onClick={() => selectResult(result)}
-                className={`w-full text-left px-3 py-1.5 text-xs truncate ${
-                  i === selectedIndex
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50"
-                }`}
-              >
-                <span className="text-muted-foreground">{dir}</span>
-                <span className={i === selectedIndex ? "text-accent-foreground" : "text-foreground"}>
-                  {file}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {showDropdown && results.length > 0 && dropdownPos &&
+        createPortal(
+          <div
+            className="fixed max-h-48 w-72 overflow-y-auto rounded-md border border-border bg-popover shadow-md z-[100]"
+            style={{
+              top: dropdownPos.top - 4,
+              left: dropdownPos.left,
+              transform: "translateY(-100%)",
+            }}
+          >
+            {results.map((result, i) => {
+              const { dir, file } = splitDisplay(result.display);
+              return (
+                <button
+                  key={result.display}
+                  onClick={() => selectResult(result)}
+                  className={`w-full text-left px-3 py-1.5 text-xs truncate ${
+                    i === selectedIndex
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50"
+                  }`}
+                >
+                  <span className="text-muted-foreground">{dir}</span>
+                  <span className={i === selectedIndex ? "text-accent-foreground" : "text-foreground"}>
+                    {file}
+                  </span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
